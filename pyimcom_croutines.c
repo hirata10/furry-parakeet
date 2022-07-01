@@ -2,8 +2,6 @@
 #include <Python.h>
 #include "ndarrayobject.h"
 
-#define IS_TIMING
-
 #ifdef IS_TIMING
 #include <stdio.h>
 #include <time.h>
