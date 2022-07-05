@@ -1,6 +1,7 @@
 # setup script for pyimcom_croutines
 
 from distutils.core import setup, Extension
+import os
 from os.path import exists
 
 if __name__ == "__main__":
@@ -14,11 +15,16 @@ if __name__ == "__main__":
         dirs += [line.strip()]
 
   # C routines
+  ec = []
+  #if os.getenv('MKL_CFLAGS')!=None:
+  #  ec += [os.getenv('MKL_CFLAGS'), os.getenv('MKL_LIBS'), '-DUSE_MKL']
   setup(name="pyimcom_croutines",
     version="1",
-    include_dirs=dirs,
-    extra_compile_args = ['-O2'],
-    ext_modules=[Extension('pyimcom_croutines', sources = ['pyimcom_croutines.c'])]
+    ext_modules=[Extension('pyimcom_croutines',
+      sources = ['pyimcom_croutines.c'],
+      include_dirs=dirs,
+      extra_compile_args=ec
+    )]
   )
 
   # Python wrappers

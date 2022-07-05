@@ -22,7 +22,7 @@
  * > kappa = Lagrange multiplier per output pixel, shape=(m,)
  * > Sigma = output noise amplification, shape=(m,)
  * > UC = fractional squared error in PSF, shape=(m,)
- * > T = coaddition matrix, shape=(m,n)
+ * > T = coaddition matrix, shape=(m,n) [needs to be multiplied by Q^T after the return]
  */
 static PyObject *pyimcom_lakernel1(PyObject *self, PyObject *args) {
 
@@ -34,7 +34,7 @@ static PyObject *pyimcom_lakernel1(PyObject *self, PyObject *args) {
 
   long m,n,i,j,a;
   double *mPhalf, *QT_C, *lam_C;
-  double *x1, *x2, *x3, *x4, *x5;
+  double *x1, *x2;
   double factor, kap, dkap, udc, sum, var;
   int ib, nbis;
 
@@ -87,7 +87,6 @@ static PyObject *pyimcom_lakernel1(PyObject *self, PyObject *args) {
 #endif
 
   /* now loop over pixels */
-  x4 = (double*)malloc((size_t)(n*sizeof(double)));
   for(a=0;a<m;a++) {
     factor = sqrt(kCmax/kCmin);
     kap = sqrt(kCmax*kCmin);
@@ -110,25 +109,15 @@ static PyObject *pyimcom_lakernel1(PyObject *self, PyObject *args) {
     /* report T and Sigma */
     x1 = mPhalf+a*n;
     x2 = lam_C;
-    x3 = QT_C;
     sum = 0.;
-    memset(x4, 0, n*sizeof(double));
     for(i=0;i<n;i++) {
-      var = (*x1++)/((*x2++)+kap);
+      *(double*)PyArray_GETPTR2(T_,a,i)	= var = (*x1++)/((*x2++)+kap);
       sum += var*var;
-      x5=x4;
-      for(j=0;j<n;j++) *x5++ += (*x3++)*var;
     }
-    for(j=0;j<n;j++) *(double*)PyArray_GETPTR2(T_,a,j) = x4[j];
     *(double*)PyArray_GETPTR1(Sigma_,a) = sum;
     *(double*)PyArray_GETPTR1(kappa_,a) = kap;
     *(double*)PyArray_GETPTR1(UC_,a) = udc;
-
-#ifdef IS_TIMING
-  if (a==0) printf("Time 3.5C, %9.6lf\n", (clock()-t1)/(double)CLOCKS_PER_SEC);
-#endif
   }
-  free((char*)x4);
 #ifdef IS_TIMING
   printf("Time 4, %9.6lf\n", (clock()-t1)/(double)CLOCKS_PER_SEC);
 #endif

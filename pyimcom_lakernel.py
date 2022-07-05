@@ -70,6 +70,53 @@ def CKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
   T = numpy.zeros((m,n))
 
   pyimcom_croutines.lakernel1(lam,Q,mPhalf,C,targetleak,kCmin,kCmax,nbis,kappa,Sigma,UC,T)
+  T = T@Q.T
+  return (kappa,Sigma,UC,T)
+
+# This one generates multiple images. there can be nt target PSFs.
+# if 2D arrays are input then assumes nt=1
+#
+# Inputs:
+#   A = system matrix, shape=(n,n)
+#   mBhalf = -B/2 = target overlap matrix, shape=(nt,m,n)
+#   C = target normalization, shape = (nt,)
+#   targetleak = allowable leakage of target PSF (nt,)
+#   kCmin, kCmax, nbis = range of kappa/C to test, number of bisections
+#
+# Outputs:
+#   kappa = Lagrange multiplier per output pixel, shape=(nt,m)
+#   Sigma = output noise amplification, shape=(nt,m)
+#   UC = fractional squared error in PSF, shape=(nt,m)
+#   T = coaddition matrix, shape=(nt,m,n)
+#
+def CKernelMulti(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
+
+  # eigensystem
+  lam, Q = numpy.linalg.eigh(A)
+
+  # get dimensions and mPhalf matrix
+  if mBhalf.ndim==2:
+    nt=1
+    (m,n) = numpy.shape(mBhalf)
+    mBhalf_image = mBhalf.reshape((1,m,n))
+    C_s = numpy.array([C])
+    targetleak_s = numpy.array([targetleak])
+  else:
+    (nt,m,n) = numpy.shape(mBhalf)
+    mBhalf_image = mBhalf
+    C_s = C
+    targetleak_s = targetleak
+
+  # output arrays
+  kappa = numpy.zeros((nt,m))
+  Sigma = numpy.zeros((nt,m))
+  UC = numpy.zeros((nt,m))
+  T = numpy.zeros((nt,m,n))
+  tt = numpy.zeros((m,n))
+
+  for k in range(nt):
+    pyimcom_croutines.lakernel1(lam,Q,mBhalf_image[k,:,:]@Q,C_s[k],targetleak_s[k],kCmin,kCmax,nbis,kappa[k,:],Sigma[k,:],UC[k,:],tt)
+    T[k,:,:] = tt@Q.T
   return (kappa,Sigma,UC,T)
 
 # this is a test case for the kernel
@@ -78,6 +125,12 @@ def CKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 #   sigma = 1 sigma width of PSF (Gaussian)
 #   u (2D numpy array or list) = Fourier wave vector of sine wave. x component first, then y
 def testkernel(sigma,u):
+
+  # number of outputs to print
+  npr = 4
+
+  # number of layers to test multi-ouptut
+  nt = 3
 
   # test grid: interpolate an m1xm1 image from n1xn1
   m1 = 25; n1 = 33
@@ -103,12 +156,15 @@ def testkernel(sigma,u):
 
   A = numpy.zeros((n,n))
   mBhalf = numpy.zeros((m,n))
+  mBhalfPoly = numpy.zeros((nt,m,n))
   C = 1.
   for i in range(n):
     for j in range(n):
       A[i,j] = numpy.exp(-1./sigma**2*( (x[i]-x[j])**2 + (y[i]-y[j])**2 ))
     for a in range(m):
       mBhalf[a,i] = numpy.exp(-1./sigma**2*( (x[i]-xout[a])**2 + (y[i]-yout[a])**2 ))
+      for k in range(nt):
+        mBhalfPoly[k,a,i] = numpy.exp(-1./(1.05**k*sigma)**2*( (x[i]-xout[a])**2 + (y[i]-yout[a])**2 ))
 
   t1a = time.perf_counter()
   print('kernel, brute force', t1a)
@@ -117,11 +173,11 @@ def testkernel(sigma,u):
   (kappa,Sigma,UC,T) = BruteForceKernel(A,mBhalf,C,1e-8)
 
   print('** brute force kernel **')
-  print('kappa =', kappa)
-  print('Sigma =', Sigma)
-  print('UC =', UC)
+  print('kappa =', kappa[:npr])
+  print('Sigma =', Sigma[:npr])
+  print('UC =', UC[:npr])
   print('Image residual =')
-  print(numpy.abs(T@thisImage - desiredOutput).reshape((m1,m1)))
+  print(numpy.abs(T@thisImage - desiredOutput).reshape((m1,m1))[:npr])
 
   t1b = time.perf_counter()
   print('kernel, C', t1b)
@@ -130,16 +186,22 @@ def testkernel(sigma,u):
   (kappa2,Sigma2,UC2,T2) = CKernel(A,mBhalf,C,1e-8)
 
   print('** C kernel **')
-  print('kappa =', kappa2)
-  print('Sigma =', Sigma2)
-  print('UC =', UC2)
+  print('kappa =', kappa2[:npr])
+  print('Sigma =', Sigma2[:npr])
+  print('UC =', UC2[:npr])
   print('Image residual =')
-  print(numpy.abs(T2@thisImage - desiredOutput).reshape((m1,m1)))
+  print(numpy.abs(T2@thisImage - desiredOutput).reshape((m1,m1))[:npr])
 
   t1c = time.perf_counter()
-  print('end -->', t1c)
 
-  print('timing: ', t1b-t1a, t1c-t1b)
+  (kappa3,Sigma3,UC3,T3) = CKernelMulti(A,mBhalfPoly,C*1.05**(2*numpy.array(range(nt))),1e-8*numpy.ones((nt,)))
+  print('Sigma3 =', Sigma3[:,:npr])
+  print('output =', (T2@thisImage)[:npr], (T3@thisImage)[:,:npr])
+
+  t1d = time.perf_counter()
+  print('end -->', t1d)
+
+  print('timing: ', t1b-t1a, t1c-t1b, t1d-t1c)
 
 # tests to run if this is the main function
 if __name__ == "__main__":
