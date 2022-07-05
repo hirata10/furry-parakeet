@@ -1,0 +1,30 @@
+You first need to make the file:
+
+IncludePaths.txt
+
+that lists the path for the numpy C header. On OSC, this is
+
+/apps/python/3.7-2019.10/lib/python3.7/site-packages/numpy/core/include/numpy/
+
+If you want to use the Intel Math Kernel Library, set the MKL_CFLAGS and MKL_LIBS environment variables.
+
+Then do the setup:
+
+python setup.py clean --all
+python setup.py build
+python setup.py install --prefix=~/local/furry-parakeet/
+
+(You may change the prefix to your install location.)
+
+To use the kernel, you will first want to include furry-parakeet in your PYTHONPATH:
+
+export PYTHONPATH=$PYTHONPATH:~/local/furry-parakeet/lib/python3.7/site-packages
+
+and then you can import it:
+
+import pyimcom_lakernel
+
+If you want you can try interpolating a plane wave:
+
+pyimcom_lakernel.testkernel(3.,[.2,.1])
+

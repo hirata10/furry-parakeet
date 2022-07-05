@@ -203,6 +203,38 @@ def testkernel(sigma,u):
 
   print('timing: ', t1b-t1a, t1c-t1b, t1d-t1c)
 
+# test interpolation functions
+#   u (2D numpy array or list) = Fourier wave vector of sine wave. x component first, then y
+def testinterp(u):
+  ny = 1024; nx = 1024
+  indata = numpy.zeros((3,ny,nx))
+  indata[0,:,:] = 1.
+  for ix in range(nx):
+    indata[1,:,ix] = u[0]*ix + u[1]*numpy.linspace(0,ny-1,ny)
+  indata[2,:,:] = numpy.cos(2*numpy.pi*indata[1,:,:])
+
+  no = 32768
+  xout = numpy.linspace(8,9,no)
+  yout = numpy.linspace(10,10.5,no)
+
+  fout = numpy.zeros((3,no))
+
+  t1a = time.perf_counter()
+  pyimcom_croutines.iD5512C(indata, xout, yout, fout)
+  t1b = time.perf_counter()
+
+  pred = u[0]*xout + u[1]*yout
+
+  #print(fout)
+  #print(pred)
+  #print(numpy.cos(2*numpy.pi*pred))
+  print('errors:')
+  print(fout[0,:]-1)
+  print(fout[1,:]-pred)
+  print(fout[2,:]-numpy.cos(2*numpy.pi*pred))
+
+  print('timing interp = {:9.6f} s'.format(t1b-t1a))
+
 # tests to run if this is the main function
 if __name__ == "__main__":
   testkernel(4., [.2,.1])
