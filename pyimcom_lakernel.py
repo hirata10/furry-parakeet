@@ -221,6 +221,7 @@ def testinterp(u):
 
   t1a = time.perf_counter()
   pyimcom_croutines.iD5512C(indata, xout, yout, fout)
+  #pyimcom_croutines.iD5512C(indata[2,:,:].reshape((1,ny,nx)), xout, yout, fout[2,:].reshape((1,no)))
   t1b = time.perf_counter()
 
   pred = u[0]*xout + u[1]*yout

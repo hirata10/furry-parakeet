@@ -35,7 +35,7 @@ static PyObject *pyimcom_lakernel1(PyObject *self, PyObject *args) {
   long m,n,i,j,a;
   double *mPhalf, *QT_C, *lam_C;
   double *x1, *x2;
-  double factor, kap, dkap, udc, sum, var;
+  double factor, kap, dkap, udc=1., sum, var;
   int ib, nbis;
 
 #ifdef IS_TIMING
@@ -166,10 +166,10 @@ static PyObject *pyimcom_iD5512C(PyObject *self, PyObject *args) {
   int i,j,l;
   long nlayer, nout, ngy, ngx, ipos, ilayer;
   double x, y, xfh, yfh; long xi, yi; /* frac and integer parts of abscissae; note 'xfh' and 'yfh' will have 1/2 subtracted */
-  double wx[10], wy[10];
-  double c,s;
+  double wx[10], wy[10], *wwx, *wwy;
+  double cx,sx,cy,sy,*Hc,*Hs;
   double interp_vstrip, out;
-  long ds;
+  long ds,ds2;
   char *temp;
 
   /* Input/output arrays */
@@ -224,6 +224,7 @@ static PyObject *pyimcom_iD5512C(PyObject *self, PyObject *args) {
   nout = xpos_->dimensions[0];
   /* .. and strides .. */
   ds = infunc_->strides[2];
+  ds2 = infunc_->strides[1] - 10*ds;
 
   /* loop over points to interpolate */
   for(ipos=0;ipos<nout;ipos++) {
@@ -238,12 +239,18 @@ static PyObject *pyimcom_iD5512C(PyObject *self, PyObject *args) {
     /* now compute the weights */
     for(j=0;j<10;j++) wx[j] = wy[j] = 0.;
     for(l=0;l<5;l++) {
-      c = cos(zeta[l]*xfh);
-      s = sin(zeta[l]*xfh);
-      for(j=0;j<10;j++) wx[j] += HmatrixC[5*j+l]*c + HmatrixS[5*j+l]*s;
-      c = cos(zeta[l]*yfh);
-      s = sin(zeta[l]*yfh);
-      for(j=0;j<10;j++) wy[j] += HmatrixC[5*j+l]*c + HmatrixS[5*j+l]*s;
+      cx = cos(zeta[l]*xfh);
+      sx = sin(zeta[l]*xfh);
+      cy = cos(zeta[l]*yfh);
+      sy = sin(zeta[l]*yfh);
+      wwx=wx; wwy=wy;
+      Hc = HmatrixC+l;
+      Hs = HmatrixS+l;
+      for(j=0;j<10;j++) {
+        *wwx++ += *Hc*cx+*Hs*sx;
+        *wwy++ += *Hc*cy+*Hs*sy;
+        Hc+=5; Hs+=5;
+      }
     }
 
 #if 0
@@ -257,14 +264,15 @@ static PyObject *pyimcom_iD5512C(PyObject *self, PyObject *args) {
     /* and the outputs */
     for(ilayer=0;ilayer<nlayer;ilayer++) {
       out = 0.;
+      temp = (char*)PyArray_GETPTR3(infunc_,ilayer,yi-4,xi-4); /* set temp to point to corner of interpolation region */
       for(i=0;i<10;i++) {
         interp_vstrip = 0.;
-        temp = (char*)PyArray_GETPTR3(infunc_,ilayer,yi-4+i,xi-4);
         for(j=0;j<10;j++) {
           interp_vstrip += wx[j]*(*(double*)temp);
           temp += ds;
         }
         out += interp_vstrip*wy[i];
+        temp += ds2; /* jump to next row of input image */
       }
       *(double*)PyArray_GETPTR2(fhatout_, ilayer, ipos) = out;
     }
