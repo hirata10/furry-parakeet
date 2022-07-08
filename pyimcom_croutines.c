@@ -17,6 +17,7 @@
  *   C = target normalization (scalar)
  *   targetleak = allowable leakage of target PSF
  *   kCmin, kCmax, nbis = range of kappa/C to test, number of bisections
+ *   smax = maximum allowed Sigma
  *
  * Outputs:
  * > kappa = Lagrange multiplier per output pixel, shape=(m,)
@@ -26,7 +27,7 @@
  */
 static PyObject *pyimcom_lakernel1(PyObject *self, PyObject *args) {
 
-  double C, targetleak, kCmin, kCmax;
+  double C, targetleak, kCmin, kCmax, smax;
   PyObject *lam, *Q, *mPhalfPy; /* inputs */
   PyObject *kappa, *Sigma, *UC, *T; /* outputs */
   PyArrayObject *lam_, *Q_, *mPhalfPy_; /* inputs */
@@ -35,7 +36,7 @@ static PyObject *pyimcom_lakernel1(PyObject *self, PyObject *args) {
   long m,n,i,j,a;
   double *mPhalf, *QT_C, *lam_C;
   double *x1, *x2;
-  double factor, kap, dkap, udc=1., sum, var;
+  double factor, kap, dkap, udc=1., sum, sum2, var;
   int ib, nbis;
 
 #ifdef IS_TIMING
@@ -45,9 +46,9 @@ static PyObject *pyimcom_lakernel1(PyObject *self, PyObject *args) {
 #endif
 
   /* read arguments */
-  if (!PyArg_ParseTuple(args, "O!O!O!ddddiO!O!O!O!", &PyArray_Type, &lam, &PyArray_Type, &Q, &PyArray_Type, &mPhalfPy,
+  if (!PyArg_ParseTuple(args, "O!O!O!ddddiO!O!O!O!d", &PyArray_Type, &lam, &PyArray_Type, &Q, &PyArray_Type, &mPhalfPy,
     &C, &targetleak, &kCmin, &kCmax, &nbis,
-    &PyArray_Type, &kappa, &PyArray_Type, &Sigma, &PyArray_Type, &UC, &PyArray_Type, &T)) {
+    &PyArray_Type, &kappa, &PyArray_Type, &Sigma, &PyArray_Type, &UC, &PyArray_Type, &T, &smax)) {
 
     return(NULL);
   }
@@ -71,12 +72,13 @@ static PyObject *pyimcom_lakernel1(PyObject *self, PyObject *args) {
   n = mPhalfPy_->dimensions[1];
 
   /* package inputs into flat C arrays to minimize pointer arithmetic in inner for loops */
-  mPhalf = (double*)malloc((size_t)(m*n*sizeof(double)));
+  mPhalf = (double*)malloc((size_t)((m*n+n*n+n)*sizeof(double)));
+  if (mPhalf==NULL) return(NULL);
   for(a=0;a<m;a++) for(j=0;j<n;j++) mPhalf[a*n+j] = *(double*)PyArray_GETPTR2(mPhalfPy_,a,j);
   /* .. and this one is Q^T */
-  QT_C = (double*)malloc((size_t)(n*n*sizeof(double)));
+  QT_C = mPhalf + m*n;
   for(i=0;i<n;i++) for(j=0;j<n;j++) QT_C[j*n+i] = *(double*)PyArray_GETPTR2(Q_,i,j);
-  lam_C = (double*)malloc((size_t)(n*sizeof(double)));
+  lam_C = QT_C+n;
   for(i=0;i<n;i++) lam_C[i] = *(double*)PyArray_GETPTR1(lam_,i);
 #ifdef IS_TIMING
   printf("Time 2, %9.6lf\n", (clock()-t1)/(double)CLOCKS_PER_SEC);
@@ -92,17 +94,18 @@ static PyObject *pyimcom_lakernel1(PyObject *self, PyObject *args) {
     kap = sqrt(kCmax*kCmin);
     for(ib=0;ib<=nbis;ib++) {
       dkap = 2.*kap;
-      sum = 0.;
+      sum = sum2 = 0.;
       x1 = mPhalf+a*n;
       x2 = lam_C;
       for(i=0;i<n;i++) {
         var = (*x1++)/(*x2+kap);
+        sum2 += var*var;
         sum += ((*x2++) + dkap)*var*var;
       }
       udc = 1.-sum/C;
       if(ib!=nbis) {
         factor=sqrt(factor);
-        kap *= udc>targetleak? 1./factor: factor;
+        kap *= udc>targetleak && sum2<smax? 1./factor: factor;
       }
     }
 
@@ -136,8 +139,6 @@ static PyObject *pyimcom_lakernel1(PyObject *self, PyObject *args) {
   Py_DECREF(T_);
 
   /* cleanup memory */
-  free((char*)QT_C);
-  free((char*)lam_C);
   free((char*)mPhalf);
 
   Py_INCREF(Py_None);

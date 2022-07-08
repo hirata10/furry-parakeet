@@ -69,7 +69,7 @@ def CKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
   UC = numpy.zeros((m,))
   tt = numpy.zeros((m,n))
 
-  pyimcom_croutines.lakernel1(lam,Q,mPhalf,C,targetleak,kCmin,kCmax,nbis,kappa,Sigma,UC,tt)
+  pyimcom_croutines.lakernel1(lam,Q,mPhalf,C,targetleak,kCmin,kCmax,nbis,kappa,Sigma,UC,tt,1e49)
   T = tt@Q.T
   return (kappa,Sigma,UC,T)
 
@@ -82,6 +82,7 @@ def CKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 #   C = target normalization, shape = (nt,)
 #   targetleak = allowable leakage of target PSF (nt,)
 #   kCmin, kCmax, nbis = range of kappa/C to test, number of bisections
+#   smax = maximum allowed Sigma
 #
 # Outputs:
 #   kappa = Lagrange multiplier per output pixel, shape=(nt,m)
@@ -89,7 +90,7 @@ def CKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 #   UC = fractional squared error in PSF, shape=(nt,m)
 #   T = coaddition matrix, shape=(nt,m,n)
 #
-def CKernelMulti(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
+def CKernelMulti(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53,smax=1e8):
 
   # eigensystem
   lam, Q = numpy.linalg.eigh(A)
@@ -115,7 +116,7 @@ def CKernelMulti(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
   tt = numpy.zeros((m,n))
 
   for k in range(nt):
-    pyimcom_croutines.lakernel1(lam,Q,mBhalf_image[k,:,:]@Q,C_s[k],targetleak_s[k],kCmin,kCmax,nbis,kappa[k,:],Sigma[k,:],UC[k,:],tt)
+    pyimcom_croutines.lakernel1(lam,Q,mBhalf_image[k,:,:]@Q,C_s[k],targetleak_s[k],kCmin,kCmax,nbis,kappa[k,:],Sigma[k,:],UC[k,:],tt,smax)
     T[k,:,:] = tt@Q.T
   return (kappa,Sigma,UC,T)
 
