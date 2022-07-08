@@ -101,8 +101,8 @@ static PyObject *pyimcom_lakernel1(PyObject *self, PyObject *args) {
       }
       udc = 1.-sum/C;
       if(ib!=nbis) {
-        kap *= udc>targetleak? 1./factor: factor;
         factor=sqrt(factor);
+        kap *= udc>targetleak? 1./factor: factor;
       }
     }
 

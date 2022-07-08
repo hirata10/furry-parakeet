@@ -67,10 +67,10 @@ def CKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
   kappa = numpy.zeros((m,))
   Sigma = numpy.zeros((m,))
   UC = numpy.zeros((m,))
-  T = numpy.zeros((m,n))
+  tt = numpy.zeros((m,n))
 
-  pyimcom_croutines.lakernel1(lam,Q,mPhalf,C,targetleak,kCmin,kCmax,nbis,kappa,Sigma,UC,T)
-  T = T@Q.T
+  pyimcom_croutines.lakernel1(lam,Q,mPhalf,C,targetleak,kCmin,kCmax,nbis,kappa,Sigma,UC,tt)
+  T = tt@Q.T
   return (kappa,Sigma,UC,T)
 
 # This one generates multiple images. there can be nt target PSFs.
@@ -165,6 +165,9 @@ def testkernel(sigma,u):
       mBhalf[a,i] = numpy.exp(-1./sigma**2*( (x[i]-xout[a])**2 + (y[i]-yout[a])**2 ))
       for k in range(nt):
         mBhalfPoly[k,a,i] = numpy.exp(-1./(1.05**k*sigma)**2*( (x[i]-xout[a])**2 + (y[i]-yout[a])**2 ))
+
+  # rescale everything
+  A *= .7; mBhalf*= .7; mBhalfPoly *= .7; C *= .7
 
   t1a = time.perf_counter()
   print('kernel, brute force', t1a)

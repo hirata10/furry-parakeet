@@ -32,3 +32,7 @@ if __name__ == "__main__":
       version='1',
       py_modules=['pyimcom_lakernel'],
   )
+  setup(name='pyimcom_interface',
+      version='1',
+      py_modules=['pyimcom_interface'],
+  )
