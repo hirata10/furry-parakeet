@@ -16,8 +16,6 @@ if __name__ == "__main__":
 
   # C routines
   ec = []
-  #if os.getenv('MKL_CFLAGS')!=None:
-  #  ec += [os.getenv('MKL_CFLAGS'), os.getenv('MKL_LIBS'), '-DUSE_MKL']
   setup(name="pyimcom_croutines",
     version="1",
     ext_modules=[Extension('pyimcom_croutines',
