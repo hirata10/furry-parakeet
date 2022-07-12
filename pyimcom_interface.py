@@ -11,6 +11,19 @@ from astropy.io import fits
 ### Simple PSF models (for testing or outputs) ###
 ##################################################
 
+# Gaussian spot, n x n, given sigma, centered
+# (useful for testing)
+def psf_gaussian(n,sigmax,sigmay):
+  xa = numpy.linspace((1-n)/2, (n-1)/2, n)
+  x = numpy.zeros((n,n))
+  y = numpy.zeros((n,n))
+  x[:,:] = xa[None,:]
+  y[:,:] = xa[:,None]
+
+  I = numpy.exp(-.5*(x**2/sigmax**2+y**2/sigmay**2)) / (2.*numpy.pi*sigmax*sigmay)
+
+  return(I)
+
 # Airy spot, n x n, with lamda/D = ldp pixels,
 # and convolved with a tophat (square, full width tophat_conv)
 # and Gaussian (sigma)
@@ -50,7 +63,8 @@ def psf_simple_airy(n,ldp,tophat_conv=0.,sigma=0.):
   return(I[kp:-kp,kp:-kp])
 
 # somewhat messier Airy function with a few diffraction features printed on
-def psf_cplx_airy(n,ldp,tophat_conv=0.,sigma=0.):
+# 'features' is an integer that can be added. everything is band limited
+def psf_cplx_airy(n,ldp,tophat_conv=0.,sigma=0.,features=0):
 
   # figure out pad size -- want to get to at least a tophat width and 6 sigmas
   kp = 1 + int(numpy.ceil(tophat_conv + 6*sigma))
@@ -71,6 +85,22 @@ def psf_cplx_airy(n,ldp,tophat_conv=0.,sigma=0.):
   for t in range(6):
     II -= f*numpy.sinc(L1*r*numpy.cos(phi+t*numpy.pi/6.))*numpy.sinc(L2*r*numpy.sin(phi+t*numpy.pi/6.))
   I = II**2 / (4.*ldp**2*(1-6*f)) * numpy.pi
+
+  if features%2==1:
+    rp = numpy.sqrt((x-1*ldp)**2+(y+2*ldp)**2) / 2. / ldp
+    II = scipy.special.jv(0,numpy.pi*rp)+scipy.special.jv(2,numpy.pi*rp)
+    I = .8*I + .2*II**2 / (4.*(2.*ldp)**2) * numpy.pi
+
+  if (features//2)%2==1:
+    Icopy = numpy.copy(I)
+    I *= .7
+    I[:-8,:] += .3*Icopy[8:,:]
+
+  if (features//4)%2==1:
+    Icopy = numpy.copy(I)
+    I *= .6
+    I[:-4,:-4] += .2*Icopy[4:,4:]
+    I[4:,:-4] += .2*Icopy[:-4,4:]
 
   # now convolve
   It = numpy.fft.fft2(I)
@@ -219,6 +249,7 @@ class PSF_Overlap:
 #   in_mask = boolean mask, 'True' means a good pixel. shape = (n_in,ny_in,nx_in) [set to None to accept all]
 #   tbdy_radius = radius of boundary to clip pixels in input images
 #   smax = maximum allowed value of Sigma (1 if you want to avoid amplifying noise)
+#   flat_penalty = amount by which to penalize having different contributions to the output from different input images
 #
 # Outputs: dictionary containing:
 #   Sigma = output noise amplification, shape=(n_out,ny_out,nx_out)
@@ -227,7 +258,7 @@ class PSF_Overlap:
 #       ... and the intermediate results kappa, A, mBhalf, C, fullmask
 #
 def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_matrices,
-  in_stamp_shape, out_stamp_dscale, out_stamp_shape, in_mask, tbdy_radius, smax=1.):
+  in_stamp_shape, out_stamp_dscale, out_stamp_shape, in_mask, tbdy_radius, smax=1., flat_penalty=0.):
 
   # number of input and output images
   n_in = psfobj.n_in
@@ -301,6 +332,15 @@ def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_ma
       else:
         # we have already computed this component of A
         A[nstart[i]:nstart[i+1],nstart[j]:nstart[j+1]] = A[nstart[j]:nstart[j+1],nstart[i]:nstart[i+1]].T
+  #
+  # flat penalty
+  if flat_penalty>0.:
+    for i in range(n_in):
+      for j in range(n_in):
+        A[nstart[i]:nstart[i+1],nstart[j]:nstart[j+1]] -= flat_penalty / n_in / 2.
+        A[nstart[j]:nstart[j+1],nstart[i]:nstart[i+1]] -= flat_penalty / n_in / 2.
+      A[nstart[i]:nstart[i+1],nstart[i]:nstart[i+1]] += flat_penalty
+
   # force exact symmetry
   A = (A+A.T)/2.
   # end A matrix
@@ -344,7 +384,7 @@ def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_ma
   T = numpy.zeros((n_out,ny_out,nx_out,n_in,ny_in,nx_in))
   for i in range(n_in):
     for k in range(ngood[i]):
-      T[:,:,:,i,masklayers[i][1][k],masklayers[i][0][k]] = T_[:,:,nstart[i]+k].reshape((n_out,ny_out,nx_out))
+      T[:,:,:,i,masklayers[i][0][k],masklayers[i][1][k]] = T_[:,:,nstart[i]+k].reshape((n_out,ny_out,nx_out))
 
   return {
     'Sigma': Sigma,
@@ -356,6 +396,88 @@ def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_ma
     'C': C,
     'full_mask': full_mask
   }
+
+# Function to creat input postage stamps of point sources of unit flux and coadd them to test the PSF matrices.
+#
+# Inputs:
+#   psf_in_list = list of input PSFs (length n_in)
+#   psf_out_list = list of output PSFs (length n_out)
+#   psf_oversamp_factor = PSF oversampling factor relative to native pixel scale (float)
+#   ctrpos = list (length n_in) of postage stamp centroids in stacking frame, shape=(2,) ** (x,y) format **
+#   distort_matrices = list (length n_in) of shape=(2,2) matrices
+#   T = coaddition matrix, shape=(n_out,ny_out,nx_out,n_in,ny_in,nx_in)
+#   in_mask = boolean mask, 'True' means a good pixel. shape = (n_in,ny_in,nx_in) [set to None to accept all]
+#   in_stamp_dscale = input (native) plate scale
+#   out_stamp_dscale = output postage stamp scale
+#   srcpos = position of the point source to inject, shape=(2,) ** (x,y) format **
+#
+# Outputs:
+#   input postage stamps, shape=(n_in,ny_in,nx_in)
+#   output postage stamp, shape=(n_out,ny_out,nx_out)
+#   output postage stamp error, shape=(n_out,ny_out,nx_out)
+#
+def test_psf_inject(psf_in_list, psf_out_list, psf_oversamp_factor, ctrpos, distort_matrices, T, in_mask, in_stamp_dscale, out_stamp_dscale, srcpos):
+
+  # basic info
+  (n_out,ny_out,nx_out,n_in,ny_in,nx_in) = numpy.shape(T)
+
+  # center pixel of input stamps
+  xctr = (nx_in-1)/2.; yctr = (ny_in-1)/2.
+
+  # make input stamp array
+  in_array = numpy.zeros((n_in,ny_in,nx_in))
+
+  p = 5 # pad length
+
+  # make the input stamps
+  for ipsf in range(n_in):
+    (ny,nx) = numpy.shape(psf_in_list[ipsf])
+
+    # get position of source in stamp coordinates
+    xpsf = srcpos[0] - ctrpos[ipsf][0]
+    ypsf = srcpos[1] - ctrpos[ipsf][1]
+    M = numpy.linalg.inv(distort_matrices[ipsf])
+    xpos = M[0,0]*xpsf + M[0,1]*ypsf + xctr
+    ypos = M[1,0]*xpsf + M[1,1]*ypsf + yctr
+
+    # now pixel positions relative to the PSF
+    inX = numpy.zeros((ny_in,nx_in))
+    inY = numpy.zeros((ny_in,nx_in))
+    inX[:,:] = numpy.linspace(-xpos,nx_in-1-xpos,nx_in)[None,:]
+    inY[:,:] = numpy.linspace(-ypos,ny_in-1-ypos,ny_in)[:,None]
+    interp_array = numpy.zeros((1,ny_in*nx_in))
+    pyimcom_croutines.iD5512C(numpy.pad(psf_in_list[ipsf],p).reshape((1,ny+2*p,nx+2*p)),
+      psf_oversamp_factor*inX.flatten() + (nx-1)/2.+p, psf_oversamp_factor*inY.flatten() + (ny-1)/2.+p, interp_array)
+    in_array[ipsf,:,:] = interp_array.reshape((ny_in,nx_in)) * psf_oversamp_factor**2
+
+  if in_mask is not None:
+    in_array = numpy.where(in_mask, in_array, 0.)
+
+  # --- end construction of the input postage stamps ---
+
+  out_array = (T.reshape(n_out*ny_out*nx_out,n_in*ny_in*nx_in)@in_array.flatten()).reshape(n_out,ny_out,nx_out)
+
+  # --- and now the 'target' output array ---
+  target_out_array = numpy.zeros((n_out,ny_out,nx_out))
+  xctr = (nx_out-1)/2.; yctr = (ny_out-1)/2.
+  for ipsf in range(n_out):
+    (ny,nx) = numpy.shape(psf_out_list[ipsf])
+
+    # get position of source in stamp coordinates
+    xpos = srcpos[0] / out_stamp_dscale + xctr
+    ypos = srcpos[1] / out_stamp_dscale + yctr
+
+    # now pixel positions relative to the PSF
+    inX = numpy.zeros((ny_out,nx_out))
+    inY = numpy.zeros((ny_out,nx_out))
+    inX[:,:] = numpy.linspace(-xpos,nx_out-1-xpos,nx_out)[None,:] * out_stamp_dscale/in_stamp_dscale
+    inY[:,:] = numpy.linspace(-ypos,ny_out-1-ypos,ny_out)[:,None] * out_stamp_dscale/in_stamp_dscale
+    interp_array = numpy.zeros((1,ny_out*nx_out))
+    pyimcom_croutines.iD5512C(numpy.pad(psf_out_list[ipsf],p).reshape((1,ny+2*p,nx+2*p)),
+      psf_oversamp_factor*inX.flatten() + (nx-1)/2.+p, psf_oversamp_factor*inY.flatten() + (ny-1)/2.+p, interp_array)
+    target_out_array[ipsf,:,:] = interp_array.reshape((ny_out,nx_out)) * psf_oversamp_factor**2
+
+  return(in_array,out_array,out_array-target_out_array)
 
 #############################
 ### Functions for testing ###

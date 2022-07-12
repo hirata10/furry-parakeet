@@ -15,21 +15,23 @@ config_file = sys.argv[1]
 with open(config_file) as myf: content = myf.read().splitlines()
 
 # basic parameters
-n_out      = 1 # number of output images
-nps        = 8 # PSF oversampling factor
-s_in       = .11 # input pixel scale in arcsec
-s_out      = .04 # output pixel scale in arcsec
-cd         = .3 # charge diffusion, rms per axis in pixels
-n1         = 256 # PSF postage stamp size
-extbdy     = .88 # boundary extension in arcsec
-uctarget   = 1e-4 # target image leakage (in RMS units)
+n_out        = 1 # number of output images
+nps          = 8 # PSF oversampling factor
+s_in         = .11 # input pixel scale in arcsec
+s_out        = .02 # output pixel scale in arcsec
+cd           = .3 # charge diffusion, rms per axis in pixels
+n1           = 512 # PSF postage stamp size
+extbdy       = 1. # boundary extension in arcsec
+uctarget     = 2e-4 # target image leakage (in RMS units)
+flat_penalty = 1e-8 # penalty for having different dependences on different inputs
 
 # default parameters
-seed       = 1000 # default seed
-pdtype     = 'R' # positional dither type (R=random, D=deterministic)
-sigout     = numpy.sqrt(1./12.+cd**2) # output smoothing
-roll       = None # no rolls
-badfrac    = 0. # fraction of pixels to randomly kill
+seed         = 1000 # default seed
+pdtype       = 'R' # positional dither type (R=random, D=deterministic)
+sigout       = numpy.sqrt(1./12.+cd**2) # output smoothing
+roll         = None # no rolls
+badfrac      = 0. # fraction of pixels to randomly kill
+messyPSF     = False # put messy asymmetries in the PSF
 
 for line in content:
 
@@ -72,6 +74,9 @@ for line in content:
     roll = line.split()[1:]
     for j in range(len(roll)): roll[j] = float(roll[j])*numpy.pi/180. # convert to float
 
+  m = re.search(r'^MESSYPSF', line)
+  if m: messyPSF = True
+
 rng = numpy.random.default_rng(seed)
 
 print('lambda =', lam, 'micron')
@@ -87,7 +92,9 @@ mlist2 = []
 posoffset = []
 if roll is None: roll = numpy.zeros((n_in,)).tolist()
 for k in range(n_in):
-  ImIn += [ pyimcom_interface.psf_cplx_airy(n1,nps*ld,tophat_conv=nps,sigma=nps*cd) ]
+  fk = 0
+  if messyPSF: fk=k
+  ImIn += [ pyimcom_interface.psf_cplx_airy(n1,nps*ld,tophat_conv=nps,sigma=nps*cd,features=fk) ]
   mlist += [pyimcom_interface.rotmatrix(roll[k])]
   mlist2 += [pyimcom_interface.rotmatrix(roll[k])*s_in]
 
@@ -121,14 +128,14 @@ if badfrac>0:
 
 # and now make a coadd matrix
 t1c = time.perf_counter()
-ims = pyimcom_interface.get_coadd_matrix(P, float(nps), [uctarget**2], posoffset, mlist2, (ny_in,nx_in), s_out, (ny_out,nx_out), inmask, extbdy)
+ims = pyimcom_interface.get_coadd_matrix(P, float(nps), [uctarget**2], posoffset, mlist2, (ny_in,nx_in), s_out, (ny_out,nx_out), inmask, extbdy, smax=1./n_in, flat_penalty=flat_penalty)
 t1d = time.perf_counter()
 print('timing coadd matrix: ', t1d-t1c)
 
 print('number of output x input pixels used:', numpy.shape(ims['mBhalf']))
 
 print('C = ', ims['C'])
-hdu = fits.PrimaryHDU(numpy.where(ims['full_mask'],1,0).astype(numpy.uint16)); hdu.writeto('mask.fits', overwrite=True)
+hdu = fits.PrimaryHDU(numpy.where(ims['full_mask'],1,0).astype(numpy.uint16)); hdu.writeto(outstem+'mask.fits', overwrite=True)
 hdu = fits.PrimaryHDU(ims['A']); hdu.writeto(outstem+'A.fits', overwrite=True)
 hdu = fits.PrimaryHDU((ims['A']-ims['A'].T)/2); hdu.writeto(outstem+'A_asym.fits', overwrite=True)
 hdu = fits.PrimaryHDU(ims['mBhalf']); hdu.writeto(outstem+'mBhalf.fits', overwrite=True)
@@ -137,7 +144,42 @@ hdu = fits.PrimaryHDU(ims['kappa']); hdu.writeto(outstem+'kappa.fits', overwrite
 hdu = fits.PrimaryHDU(numpy.sqrt(ims['Sigma'])); hdu.writeto(outstem+'sqSigma.fits', overwrite=True)
 hdu = fits.PrimaryHDU(numpy.sqrt(ims['UC'])); hdu.writeto(outstem+'sqUC.fits', overwrite=True)
 hdu = fits.PrimaryHDU(ims['T'].reshape((n_out,ny_out*nx_out, n_in*ny_in*nx_in,))); hdu.writeto(outstem+'T.fits', overwrite=True)
+hdu = fits.PrimaryHDU(numpy.transpose(numpy.sum(ims['T'], axis=(4,5)), axes=(1,0,3,2)).reshape((ny_out,nx_out*n_in*n_out))); hdu.writeto(outstem+'Tsum.fits', overwrite=True)
 hdu = fits.PrimaryHDU(numpy.where(ims['full_mask'],1,0).astype(numpy.uint16)); hdu.writeto(outstem+'mask.fits', overwrite=True)
+
+# make test image
+# put test source in lower-right quadrant as displayed in ds9
+#
+# [   |   ]
+# [   |   ]
+# [   |   ]   (60% of the way from left to right,
+# [---+---]    20% of the way from bottom to top)
+# [   |   ]
+# [   |X  ]
+# [   |   ]
+#
+test_srcpos = (.1*(nx_out-1)*s_out, -.3*(ny_out-1)*s_out)
+(intest, outtest, outerr) = pyimcom_interface.test_psf_inject(ImIn, ImOut, nps, posoffset, mlist2, ims['T'], inmask, s_in, s_out, test_srcpos)
+hdu = fits.PrimaryHDU(intest); hdu.writeto(outstem+'sample_ptsrc_in.fits', overwrite=True)
+hdu = fits.PrimaryHDU(numpy.transpose(intest, axes=(1,0,2)).reshape(ny_in,n_in*nx_in)); hdu.writeto(outstem+'sample_ptsrc_in_flat.fits', overwrite=True)
+hdu = fits.PrimaryHDU(outtest); hdu.writeto(outstem+'sample_ptsrc_out.fits', overwrite=True)
+hdu = fits.PrimaryHDU(outerr); hdu.writeto(outstem+'sample_ptsrc_out_err.fits', overwrite=True)
+amp = numpy.zeros((n_out,))
+for ipsf in range(n_out):
+  print('error {:2d} {:11.5E}'.format(ipsf, numpy.sqrt(numpy.sum(outerr[ipsf,:,:]**2)/numpy.sum(outtest[ipsf,:,:]**2))))
+  amp[ipsf] = numpy.sqrt(numpy.sum(outtest[ipsf,:,:]**2))
+
+# more tests with random pt src positions
+print('')
+allerr = []
+for itest in range(1000):
+  test_srcpos = ((s_out*(nx_out-1)*.5+extbdy)*(rng.random()-.5), (s_out*(ny_out-1)*.5+extbdy)*(rng.random()-.5))
+  #print('-- random point {:3d} at ({:8.5f},{:8.5f}) --'.format(itest, test_srcpos[0], test_srcpos[1]))
+  (intest, outtest, outerr) = pyimcom_interface.test_psf_inject(ImIn, ImOut, nps, posoffset, mlist2, ims['T'], inmask, s_in, s_out, test_srcpos)
+  #for ipsf in range(n_out):
+  #  print('error {:3d},{:2d} {:11.5E}    :'.format(itest, ipsf, numpy.sqrt(numpy.sum(outerr[ipsf,:,:]**2))/amp[ipsf]))
+  allerr += [numpy.sqrt(numpy.sum(outerr[ipsf,:,:]**2))/amp[ipsf]]
+print('max err = {:11.5E}'.format(numpy.amax(allerr)))
 
 # print summary information
 print('percentiles of sqrtUC, sqrtSigma, kappa:')
