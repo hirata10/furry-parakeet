@@ -88,21 +88,20 @@ ld = lam/2.37e6*206265./s_in
 
 ImIn = []
 mlist = []
-mlist2 = []
 posoffset = []
 if roll is None: roll = numpy.zeros((n_in,)).tolist()
 for k in range(n_in):
   fk = 0
   if messyPSF: fk=k
+  mag = 1.+.02*(k-3)
   ImIn += [ pyimcom_interface.psf_cplx_airy(n1,nps*ld,tophat_conv=nps,sigma=nps*cd,features=fk) ]
-  mlist += [pyimcom_interface.rotmatrix(roll[k])]
-  mlist2 += [pyimcom_interface.rotmatrix(roll[k])*s_in]
+  mlist += [pyimcom_interface.rotmatrix(roll[k])*mag]
 
   # positional offsets
   f = numpy.zeros((2,))
   f[0] = rng.random()
   f[1] = rng.random()
-  Mf = mlist2[k]@f
+  Mf = s_in*mlist[k]@f
   posoffset += [(Mf[0],Mf[1])]
 ImOut = [ pyimcom_interface.psf_simple_airy(n1,nps*ld,tophat_conv=0.,sigma=nps*sigout) ]
 
@@ -128,7 +127,7 @@ if badfrac>0:
 
 # and now make a coadd matrix
 t1c = time.perf_counter()
-ims = pyimcom_interface.get_coadd_matrix(P, float(nps), [uctarget**2], posoffset, mlist2, (ny_in,nx_in), s_out, (ny_out,nx_out), inmask, extbdy, smax=1./n_in, flat_penalty=flat_penalty)
+ims = pyimcom_interface.get_coadd_matrix(P, float(nps), [uctarget**2], posoffset, mlist, s_in, (ny_in,nx_in), s_out, (ny_out,nx_out), inmask, extbdy, smax=1./n_in, flat_penalty=flat_penalty)
 t1d = time.perf_counter()
 print('timing coadd matrix: ', t1d-t1c)
 
@@ -159,7 +158,8 @@ hdu = fits.PrimaryHDU(numpy.where(ims['full_mask'],1,0).astype(numpy.uint16)); h
 # [   |   ]
 #
 test_srcpos = (.1*(nx_out-1)*s_out, -.3*(ny_out-1)*s_out)
-(intest, outtest, outerr) = pyimcom_interface.test_psf_inject(ImIn, ImOut, nps, posoffset, mlist2, ims['T'], inmask, s_in, s_out, test_srcpos)
+(intest, outtest, outerr) = pyimcom_interface.test_psf_inject(ImIn, ImOut, nps, posoffset, mlist, ims['T'], inmask, s_in, s_out, test_srcpos)
+print('input image sums =', numpy.sum(intest, axis=(1,2)))
 hdu = fits.PrimaryHDU(intest); hdu.writeto(outstem+'sample_ptsrc_in.fits', overwrite=True)
 hdu = fits.PrimaryHDU(numpy.transpose(intest, axes=(1,0,2)).reshape(ny_in,n_in*nx_in)); hdu.writeto(outstem+'sample_ptsrc_in_flat.fits', overwrite=True)
 hdu = fits.PrimaryHDU(outtest); hdu.writeto(outstem+'sample_ptsrc_out.fits', overwrite=True)
@@ -169,13 +169,18 @@ for ipsf in range(n_out):
   print('error {:2d} {:11.5E}'.format(ipsf, numpy.sqrt(numpy.sum(outerr[ipsf,:,:]**2)/numpy.sum(outtest[ipsf,:,:]**2))))
   amp[ipsf] = numpy.sqrt(numpy.sum(outtest[ipsf,:,:]**2))
 
+# test input with Gaussian white noise
+noise_in = rng.normal(0., 1., size=(n_in*ny_in*nx_in,))
+noise_out = (ims['T'].reshape((n_out,ny_out*nx_out, n_in*ny_in*nx_in))@noise_in).reshape((n_out, ny_out, nx_out))
+hdu = fits.PrimaryHDU(numpy.transpose(noise_out, axes=(1,0,2)).reshape(ny_out, n_out*nx_out)); hdu.writeto(outstem+'samplenoise.fits', overwrite=True)
+
 # more tests with random pt src positions
 print('')
 allerr = []
 for itest in range(1000):
   test_srcpos = ((s_out*(nx_out-1)*.5+extbdy)*(rng.random()-.5), (s_out*(ny_out-1)*.5+extbdy)*(rng.random()-.5))
   #print('-- random point {:3d} at ({:8.5f},{:8.5f}) --'.format(itest, test_srcpos[0], test_srcpos[1]))
-  (intest, outtest, outerr) = pyimcom_interface.test_psf_inject(ImIn, ImOut, nps, posoffset, mlist2, ims['T'], inmask, s_in, s_out, test_srcpos)
+  (intest, outtest, outerr) = pyimcom_interface.test_psf_inject(ImIn, ImOut, nps, posoffset, mlist, ims['T'], inmask, s_in, s_out, test_srcpos)
   #for ipsf in range(n_out):
   #  print('error {:3d},{:2d} {:11.5E}    :'.format(itest, ipsf, numpy.sqrt(numpy.sum(outerr[ipsf,:,:]**2))/amp[ipsf]))
   allerr += [numpy.sqrt(numpy.sum(outerr[ipsf,:,:]**2))/amp[ipsf]]

@@ -194,7 +194,7 @@ class PSF_Overlap:
       else:
         xco = numpy.copy(xo); yco = numpy.copy(yo)
       out_array = numpy.zeros((1,ns2*ns2))
-      pyimcom_croutines.iD5512C(numpy.pad(psf_in_list[ipsf]*detM,p).reshape((1,ny+2*p,nx+2*p)),
+      pyimcom_croutines.iD5512C(numpy.pad(psf_in_list[ipsf],p).reshape((1,ny+2*p,nx+2*p)),
         xco.flatten()+xctr+p/2, yco.flatten()+yctr+p/2, out_array)
       self.psf_array[ipsf,:,:] = out_array.reshape((ns2,ns2))
 
@@ -243,6 +243,7 @@ class PSF_Overlap:
 #   targetleak = target leakage, shape=(n_out,) or length n_out list
 #   ctrpos = list (length n_in) of postage stamp centroids in stacking frame, shape=(2,) ** (x,y) format **
 #   distort_matrices = list (length n_in) of shape=(2,2) matrices
+#   in_stamp_dscale = input postage stamp scale
 #   in_stamp_shape = input postage stamp size, length 2 tuple (ny_in,nx_in)
 #   out_stamp_dscale = output postage stamp scale
 #   out_stamp_shape = output postage stamp size, length 2 tuple (ny_out,nx_out)
@@ -258,7 +259,7 @@ class PSF_Overlap:
 #       ... and the intermediate results kappa, A, mBhalf, C, fullmask
 #
 def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_matrices,
-  in_stamp_shape, out_stamp_dscale, out_stamp_shape, in_mask, tbdy_radius, smax=1., flat_penalty=0.):
+  in_stamp_dscale, in_stamp_shape, out_stamp_dscale, out_stamp_shape, in_mask, tbdy_radius, smax=1., flat_penalty=0.):
 
   # number of input and output images
   n_in = psfobj.n_in
@@ -276,8 +277,8 @@ def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_ma
     yo = numpy.zeros((ny_in,nx_in))
     xo[:,:] = numpy.linspace((1-nx_in)/2, (nx_in-1)/2, nx_in)[None,:]
     yo[:,:] = numpy.linspace((1-ny_in)/2, (ny_in-1)/2, ny_in)[:,None]
-    xpos[i,:,:] = distort_matrices[i][0,0]*xo + distort_matrices[i][0,1]*yo + ctrpos[i][0]
-    ypos[i,:,:] = distort_matrices[i][1,0]*xo + distort_matrices[i][1,1]*yo + ctrpos[i][1]
+    xpos[i,:,:] = in_stamp_dscale*(distort_matrices[i][0,0]*xo + distort_matrices[i][0,1]*yo) + ctrpos[i][0]
+    ypos[i,:,:] = in_stamp_dscale*(distort_matrices[i][1,0]*xo + distort_matrices[i][1,1]*yo) + ctrpos[i][1]
 
   # mask information and table
   if in_mask is None:
@@ -436,7 +437,7 @@ def test_psf_inject(psf_in_list, psf_out_list, psf_oversamp_factor, ctrpos, dist
     # get position of source in stamp coordinates
     xpsf = srcpos[0] - ctrpos[ipsf][0]
     ypsf = srcpos[1] - ctrpos[ipsf][1]
-    M = numpy.linalg.inv(distort_matrices[ipsf])
+    M = numpy.linalg.inv(in_stamp_dscale*distort_matrices[ipsf])
     xpos = M[0,0]*xpsf + M[0,1]*ypsf + xctr
     ypos = M[1,0]*xpsf + M[1,1]*ypsf + yctr
 
@@ -520,8 +521,8 @@ def testpsfoverlap():
   # and now make a coadd matrix
   t1c = time.perf_counter()
   get_coadd_matrix(P, float(nps), [1.e-8], [(0.055,0), (0,0), (0,0.025), (0,0), (0,0.055)],
-    [rotmatrix(0.)*s_in, rotmatrix(numpy.pi/4.)*s_in, rotmatrix(numpy.pi/3.)*s_in, rotmatrix(0.)*s_in, rotmatrix(0.)*s_in],
-    (42,42), s_out, (27,27), None, .66)
+    [rotmatrix(0.), rotmatrix(numpy.pi/4.), rotmatrix(numpy.pi/3.), rotmatrix(0.), rotmatrix(0.)],
+    s_in, (42,42), s_out, (27,27), None, .66)
   t1d = time.perf_counter()
   print('timing coadd matrix: ', t1d-t1c)
 
