@@ -18,7 +18,7 @@ with open(config_file) as myf: content = myf.read().splitlines()
 n_out        = 1 # number of output images
 nps          = 8 # PSF oversampling factor
 s_in         = .11 # input pixel scale in arcsec
-s_out        = .02 # output pixel scale in arcsec
+s_out        = .025 # output pixel scale in arcsec
 cd           = .3 # charge diffusion, rms per axis in pixels
 n1           = 512 # PSF postage stamp size
 extbdy       = 1. # boundary extension in arcsec
@@ -30,6 +30,8 @@ seed         = 1000 # default seed
 pdtype       = 'R' # positional dither type (R=random, D=deterministic)
 sigout       = numpy.sqrt(1./12.+cd**2) # output smoothing
 roll         = None # no rolls
+shear        = None # no camera shear
+magnify      = None # no camera magnification
 badfrac      = 0. # fraction of pixels to randomly kill
 messyPSF     = False # put messy asymmetries in the PSF
 
@@ -74,6 +76,16 @@ for line in content:
     roll = line.split()[1:]
     for j in range(len(roll)): roll[j] = float(roll[j])*numpy.pi/180. # convert to float
 
+  m = re.search(r'^SHEAR:', line) # shears g1,g2 for each exposure
+  if m:
+    shear = line.split()[1:]
+    for j in range(len(shear)): shear[j] = float(shear[j])
+
+  m = re.search(r'^MAGNIFY:', line) # plate scale divided by 1+magnify[], so >0 --> smaller plate scale --> magnified image
+  if m:
+    magnify = line.split()[1:]
+    for j in range(len(magnify)): magnify[j] = float(magnify[j])
+
   m = re.search(r'^MESSYPSF', line)
   if m: messyPSF = True
 
@@ -90,12 +102,13 @@ ImIn = []
 mlist = []
 posoffset = []
 if roll is None: roll = numpy.zeros((n_in,)).tolist()
+if shear is None: shear = numpy.zeros((2*n_in,)).tolist()
+if magnify is None: magnify = numpy.zeros((n_in,)).tolist()
 for k in range(n_in):
   fk = 0
   if messyPSF: fk=k
-  mag = 1.+.02*(k-3)
   ImIn += [ pyimcom_interface.psf_cplx_airy(n1,nps*ld,tophat_conv=nps,sigma=nps*cd,features=fk) ]
-  mlist += [pyimcom_interface.rotmatrix(roll[k])*mag]
+  mlist += [pyimcom_interface.rotmatrix(roll[k])@pyimcom_interface.shearmatrix(shear[2*k],shear[2*k+1])/(1.+magnify[k])]
 
   # positional offsets
   f = numpy.zeros((2,))
@@ -107,6 +120,9 @@ ImOut = [ pyimcom_interface.psf_simple_airy(n1,nps*ld,tophat_conv=0.,sigma=nps*s
 
 print('translation:', posoffset)
 print('roll:', numpy.array(roll)*180./numpy.pi)
+print('magnify:', numpy.array(magnify))
+print('shear g1:', numpy.array(shear)[::2])
+print('shear g2:', numpy.array(shear)[1::2])
 
 t1a = time.perf_counter()
 P = pyimcom_interface.PSF_Overlap(ImIn, ImOut, .5, 2*n1-1, s_in, distort_matrices=mlist)
@@ -115,6 +131,11 @@ print('timing psf overlap: ', t1b-t1a)
 
 hdu = fits.PrimaryHDU(P.psf_array)
 hdu.writeto(outstem+'testpsf1.fits', overwrite=True)
+q1 = 48
+if q1>=n1: q1=n1-1
+q2 = 2*q1+1
+hdu = fits.PrimaryHDU(numpy.transpose(P.psf_array[:,n1-q1:n1+q1+1,n1-q1:n1+q1+1],axes=(1,0,2)).reshape(q2,q2*(n_in+n_out)))
+hdu.writeto(outstem+'testpsf1b.fits', overwrite=True)
 hdu = fits.PrimaryHDU(numpy.transpose(P.overlaparray,axes=(0,2,1,3)).reshape(P.nsample*P.n_tot,P.nsample*P.n_tot))
 hdu.writeto(outstem+'testpsf2.fits', overwrite=True)
 
@@ -136,7 +157,6 @@ print('number of output x input pixels used:', numpy.shape(ims['mBhalf']))
 print('C = ', ims['C'])
 hdu = fits.PrimaryHDU(numpy.where(ims['full_mask'],1,0).astype(numpy.uint16)); hdu.writeto(outstem+'mask.fits', overwrite=True)
 hdu = fits.PrimaryHDU(ims['A']); hdu.writeto(outstem+'A.fits', overwrite=True)
-hdu = fits.PrimaryHDU((ims['A']-ims['A'].T)/2); hdu.writeto(outstem+'A_asym.fits', overwrite=True)
 hdu = fits.PrimaryHDU(ims['mBhalf']); hdu.writeto(outstem+'mBhalf.fits', overwrite=True)
 hdu = fits.PrimaryHDU(ims['C']); hdu.writeto(outstem+'C.fits', overwrite=True)
 hdu = fits.PrimaryHDU(ims['kappa']); hdu.writeto(outstem+'kappa.fits', overwrite=True)
@@ -174,7 +194,7 @@ noise_in = rng.normal(0., 1., size=(n_in*ny_in*nx_in,))
 noise_out = (ims['T'].reshape((n_out,ny_out*nx_out, n_in*ny_in*nx_in))@noise_in).reshape((n_out, ny_out, nx_out))
 hdu = fits.PrimaryHDU(numpy.transpose(noise_out, axes=(1,0,2)).reshape(ny_out, n_out*nx_out)); hdu.writeto(outstem+'samplenoise.fits', overwrite=True)
 
-# more tests with random pt src positions
+# more tests with random pt src positions -- to do statistics on how well things worked in this stamp
 print('')
 allerr = []
 for itest in range(1000):
@@ -184,6 +204,9 @@ for itest in range(1000):
   #for ipsf in range(n_out):
   #  print('error {:3d},{:2d} {:11.5E}    :'.format(itest, ipsf, numpy.sqrt(numpy.sum(outerr[ipsf,:,:]**2))/amp[ipsf]))
   allerr += [numpy.sqrt(numpy.sum(outerr[ipsf,:,:]**2))/amp[ipsf]]
+allerr = numpy.array(allerr)
+print('rms err = {:11.5E}'.format(numpy.sqrt(numpy.mean(allerr**2))))
+print('med err = {:11.5E}'.format(numpy.median(allerr)))
 print('max err = {:11.5E}'.format(numpy.amax(allerr)))
 
 # print summary information

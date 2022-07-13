@@ -1,15 +1,35 @@
+# configuration file for the test script (you can copy/modify to experiment with it)
+
+# wavelength [um]
 LAMBDA: 1.29
+
+# number of dithers
 N: 6
-#INSIZE: 44 44
+
+# input and output postage stamp sizes
 INSIZE: 64 64
-OUTSIZE: 60 60
+OUTSIZE: 50 50
 
+# target sqrt{U/C} (1e-3 is a reasonable choice)
 UCTARGET: 1e-3
-EXTRASMOOTH: 0.64
-BADFRAC: .0
 
+# how much Gaussian smoothing (in input pixels) to put in the output image
+EXTRASMOOTH: 0.63
+
+# bad pixel fraction (this script randomly kills pixels)
+BADFRAC: .025
+
+# Optional rolls (in degrees for each exposure) and camera distortions
+# (shear is g1,g2 for each exposure; magnify is for each exposure)
 ROLL: 45 45 45 0 195 0
+SHEAR: 0 0 0 0 0 0 0 0 0 0 -.01 .01
+MAGNIFY: .02 -.02 0 0 0 0
+
+# turn this on if you want horrific messy non-identical input PSF
 MESSYPSF
 
+# output file prefix
 OUT: out/this_test_
-RNGSEED: 2022
+
+# random number generator seed
+RNGSEED: 3000

@@ -93,14 +93,14 @@ def psf_cplx_airy(n,ldp,tophat_conv=0.,sigma=0.,features=0):
 
   if (features//2)%2==1:
     Icopy = numpy.copy(I)
-    I *= .7
-    I[:-8,:] += .3*Icopy[8:,:]
+    I *= .85
+    I[:-8,:] += .15*Icopy[8:,:]
 
   if (features//4)%2==1:
     Icopy = numpy.copy(I)
-    I *= .6
-    I[:-4,:-4] += .2*Icopy[4:,4:]
-    I[4:,:-4] += .2*Icopy[:-4,4:]
+    I *= .8
+    I[:-4,:-4] += .1*Icopy[4:,4:]
+    I[4:,:-4] += .1*Icopy[:-4,4:]
 
   # now convolve
   It = numpy.fft.fft2(I)
@@ -121,6 +121,11 @@ def psf_cplx_airy(n,ldp,tophat_conv=0.,sigma=0.,features=0):
 # (i.e., theta is position angle of the native frame)
 def rotmatrix(theta):
   return(numpy.array([[numpy.cos(theta), -numpy.sin(theta)], [numpy.sin(theta), numpy.cos(theta)]]))
+
+# shear matrix by reduced shear (g1,g2)
+# unit determinant
+def shearmatrix(g1,g2):
+  return( numpy.array([[1-g1,-g2],[-g2,1+g1]]) / numpy.sqrt(1.-g1**2-g2**2) )
 
 ########################################################
 ### Now the main functions that we use for real PSFs ###

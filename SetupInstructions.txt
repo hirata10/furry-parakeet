@@ -20,11 +20,21 @@ To use the kernel, you will first want to include furry-parakeet in your PYTHONP
 
 export PYTHONPATH=$PYTHONPATH:~/local/furry-parakeet/lib/python3.7/site-packages
 
-and then you can import it:
+(or the appropriate path in your environment) and then you can import it:
 
 import pyimcom_lakernel
 
 If you want you can try interpolating a plane wave:
 
 pyimcom_lakernel.testkernel(3.,[.2,.1])
+
+To use the interface to coadd images, you can try
+
+import pyimcom_interface
+
+(see InterfaceInstructions.txt for a list of functions)
+
+You can do an example by making the 'out/' directory and using the testdither.py script:
+
+python testdither.py sample_config.txt
 
