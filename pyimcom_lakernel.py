@@ -1,6 +1,7 @@
 import numpy
 import pyimcom_croutines
 import time
+import jax
 
 # 'Brute force' version of the kernel
 # Slow and useful only for comparisons
@@ -18,15 +19,33 @@ import time
 #   UC = fractional squared error in PSF, shape=(m,)
 #   T = coaddition matrix, shape=(m,n)
 #
+@jax.jit
 def BruteForceKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 
   # get dimensions
   (m,n) = numpy.shape(mBhalf)
 
   # eigensystem
-  lam, Q = numpy.linalg.eigh(A)
+  lam, Q = jax.numpy.linalg.eigh(A)
+  lam = np.asarray(lam)
+  Q = np.asarray(Q)
+
+
+  # get dimensions and mPhalf matrix
+  if mBhalf.ndim==2:
+    nt=1
+    (m,n) = numpy.shape(mBhalf)
+    mBhalf_image = mBhalf.reshape((1,m,n))
+    C_s = numpy.asarray([C])
+    targetleak_s = numpy.asarray([targetleak])
+  else:
+    (nt,m,n) = numpy.shape(mBhalf)
+    mBhalf_image = mBhalf
+    C_s = C
+    targetleak_s = targetleak
+
   # -P/2 matrix
-  mPhalf = mBhalf@Q
+  mPhalf = jax.numpy.matmul(mBhalf,Q)
 
   # allocate targets
   kappa = numpy.zeros((m,))
@@ -40,14 +59,14 @@ def BruteForceKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
     kappa[a] = numpy.sqrt(kCmax*kCmin)
     for ibis in range(nbis+1):
       factor = numpy.sqrt(factor)
-      UC[a] = 1-numpy.sum((lam+2*kappa[a])/(lam+kappa[a])**2*mPhalf[a,:]**2)/C
+      UC[a] = 1-jax.numpy.sum((lam+2*kappa[a])/(lam+kappa[a])**2*mPhalf[a,:]**2)/C
       if ibis!=nbis:
         if UC[a]>targetleak:
           kappa[a] /= factor
         else:
           kappa[a] *= factor
-    T[a,:] = Q@(mPhalf[a,:]/(lam+kappa[a]))
-    Sigma[a] = numpy.sum((mPhalf[a,:]/(lam+kappa[a]))**2)
+    T[a,:] = jax.numpy.matmul(Q,(mPhalf[a,:]/(lam+kappa[a])))
+    Sigma[a] = jax.numpy.sum((mPhalf[a,:]/(lam+kappa[a]))**2)
 
   return (kappa,Sigma,UC,T)
 
@@ -59,7 +78,9 @@ def CKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
   (m,n) = numpy.shape(mBhalf)
 
   # eigensystem
-  lam, Q = numpy.linalg.eigh(A)
+  lam, Q = jax.numpy.linalg.eigh(A)
+  lam = np.asarray(lam)
+  Q = np.asarray(Q)
   # -P/2 matrix
   mPhalf = mBhalf@Q
 
@@ -93,15 +114,17 @@ def CKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 def CKernelMulti(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53,smax=1e8):
 
   # eigensystem
-  lam, Q = numpy.linalg.eigh(A)
+  lam, Q = jax.numpy.linalg.eigh(A)
+  lam = np.asarray(lam)
+  Q = np.asarray(Q)
 
   # get dimensions and mPhalf matrix
   if mBhalf.ndim==2:
     nt=1
     (m,n) = numpy.shape(mBhalf)
     mBhalf_image = mBhalf.reshape((1,m,n))
-    C_s = numpy.array([C])
-    targetleak_s = numpy.array([targetleak])
+    C_s = numpy.asarray([C])
+    targetleak_s = numpy.asarray([targetleak])
   else:
     (nt,m,n) = numpy.shape(mBhalf)
     mBhalf_image = mBhalf
@@ -116,7 +139,19 @@ def CKernelMulti(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53,smax=1e8):
   tt = numpy.zeros((m,n))
 
   for k in range(nt):
-    pyimcom_croutines.lakernel1(lam,Q,mBhalf_image[k,:,:]@Q,C_s[k],targetleak_s[k],kCmin,kCmax,nbis,kappa[k,:],Sigma[k,:],UC[k,:],tt,smax)
+    pyimcom_croutines.lakernel1(    lam,
+                                    Q,
+                                    mBhalf_image[k,:,:]@Q,
+                                    C_s[k],
+                                    targetleak_s[k],
+                                    kCmin,
+                                    kCmax,
+                                    nbis,
+                                    kappa[k,:],
+                                    Sigma[k,:],
+                                    UC[k,:],
+                                    tt,
+                                    smax)
     T[k,:,:] = tt@Q.T
   return (kappa,Sigma,UC,T)
 
