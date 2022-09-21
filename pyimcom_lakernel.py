@@ -4,7 +4,7 @@ import time
 import jax
 from functools import partial
 
-print('......lak1')
+print('......lak2')
 
 class HashableArrayWrapper:
   def __init__(self, val):
@@ -55,7 +55,7 @@ def BruteForceKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 
   return BruteForceKernel_(lam,Q,A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53)
 
-@partial(gnool_jit, static_array_argnums=(0,1,2,3,4,5))
+@partial(gnool_jit, static_array_argnums=(0,1,2,3,4,5,6,7,8))
 def BruteForceKernel_(lam,Q,A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 
   # get dimensions and mPhalf matrix
