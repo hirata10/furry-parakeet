@@ -8,7 +8,7 @@ print('......1')
 # 'Brute force' version of the kernel
 # Slow and useful only for comparisons
 #
-# Inputs:
+# Inumpyuts:
 #   A = system matrix, shape=(n,n)
 #   mBhalf = -B/2 = target overlap matrix, shape=(m,n)
 #   C = target normalization (scalar)
@@ -29,8 +29,8 @@ def BruteForceKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 
   # eigensystem
   lam, Q = jax.numpy.linalg.eigh(A)
-  lam = np.asarray(lam)
-  Q = np.asarray(Q)
+  lam = numpy.asarray(lam)
+  Q = numpy.asarray(Q)
 
 
   # get dimensions and mPhalf matrix
@@ -81,8 +81,8 @@ def CKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 
   # eigensystem
   lam, Q = jax.numpy.linalg.eigh(A)
-  lam = np.asarray(lam)
-  Q = np.asarray(Q)
+  lam = numpy.asarray(lam)
+  Q = numpy.asarray(Q)
   # -P/2 matrix
   mPhalf = mBhalf@Q
 
@@ -97,9 +97,9 @@ def CKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
   return (kappa,Sigma,UC,T)
 
 # This one generates multiple images. there can be nt target PSFs.
-# if 2D arrays are input then assumes nt=1
+# if 2D arrays are inumpyut then assumes nt=1
 #
-# Inputs:
+# Inumpyuts:
 #   A = system matrix, shape=(n,n)
 #   mBhalf = -B/2 = target overlap matrix, shape=(nt,m,n)
 #   C = target normalization, shape = (nt,)
@@ -117,8 +117,8 @@ def CKernelMulti(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53,smax=1e8):
 
   # eigensystem
   lam, Q = jax.numpy.linalg.eigh(A)
-  lam = np.asarray(lam)
-  Q = np.asarray(Q)
+  lam = numpy.asarray(lam)
+  Q = numpy.asarray(Q)
 
   # get dimensions and mPhalf matrix
   if mBhalf.ndim==2:
@@ -159,13 +159,13 @@ def CKernelMulti(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53,smax=1e8):
 
 # this is a test case for the kernel
 # nothing fancy. uses to interpolate an image containing a single sine wave, with Gaussian PSF
-# inputs:
+# inumpyuts:
 #   sigma = 1 sigma width of PSF (Gaussian)
 #   u (2D numpy array or list) = Fourier wave vector of sine wave. x component first, then y
 def testkernel(sigma,u):
 
   # number of outputs to print
-  npr = 4
+  numpyr = 4
 
   # number of layers to test multi-ouptut
   nt = 3
@@ -214,11 +214,11 @@ def testkernel(sigma,u):
   (kappa,Sigma,UC,T) = BruteForceKernel(A,mBhalf,C,1e-8)
 
   print('** brute force kernel **')
-  print('kappa =', kappa[:npr])
-  print('Sigma =', Sigma[:npr])
-  print('UC =', UC[:npr])
+  print('kappa =', kappa[:numpyr])
+  print('Sigma =', Sigma[:numpyr])
+  print('UC =', UC[:numpyr])
   print('Image residual =')
-  print(numpy.abs(T@thisImage - desiredOutput).reshape((m1,m1))[:npr])
+  print(numpy.abs(T@thisImage - desiredOutput).reshape((m1,m1))[:numpyr])
 
   t1b = time.perf_counter()
   print('kernel, C', t1b)
@@ -227,17 +227,17 @@ def testkernel(sigma,u):
   (kappa2,Sigma2,UC2,T2) = CKernel(A,mBhalf,C,1e-8)
 
   print('** C kernel **')
-  print('kappa =', kappa2[:npr])
-  print('Sigma =', Sigma2[:npr])
-  print('UC =', UC2[:npr])
+  print('kappa =', kappa2[:numpyr])
+  print('Sigma =', Sigma2[:numpyr])
+  print('UC =', UC2[:numpyr])
   print('Image residual =')
-  print(numpy.abs(T2@thisImage - desiredOutput).reshape((m1,m1))[:npr])
+  print(numpy.abs(T2@thisImage - desiredOutput).reshape((m1,m1))[:numpyr])
 
   t1c = time.perf_counter()
 
   (kappa3,Sigma3,UC3,T3) = CKernelMulti(A,mBhalfPoly,C*1.05**(2*numpy.array(range(nt))),1e-8*numpy.ones((nt,)))
-  print('Sigma3 =', Sigma3[:,:npr])
-  print('output =', (T2@thisImage)[:npr], (T3@thisImage)[:,:npr])
+  print('Sigma3 =', Sigma3[:,:numpyr])
+  print('output =', (T2@thisImage)[:numpyr], (T3@thisImage)[:,:numpyr])
 
   t1d = time.perf_counter()
   print('end -->', t1d)
