@@ -3,7 +3,32 @@ import pyimcom_croutines
 import time
 import jax
 
-print('......lak4')
+print('......lak1')
+
+class HashableArrayWrapper:
+  def __init__(self, val):
+    self.val = val
+  def __hash__(self):
+    return some_hash_function(self.val)
+  def __eq__(self, other):
+    return (isinstance(other, HashableArrayWrapper) and
+            jax.numpy.all(jax.numpy.equal(self.val, other.val)))
+
+def gnool_jit(fun, static_array_argnums=()):
+  @partial(jit, static_argnums=static_array_argnums)
+  def callee(*args):
+    args = list(args)
+    for i in static_array_argnums:
+      args[i] = args[i].val
+    return fun(*args)
+
+  def caller(*args):
+    args = list(args)
+    for i in static_array_argnums:
+      args[i] = HashableArrayWrapper(args[i])
+    return callee(*args)
+
+  return caller
 
 # 'Brute force' version of the kernel
 # Slow and useful only for comparisons
@@ -27,10 +52,9 @@ def BruteForceKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
   lam = numpy.asarray(lam)
   Q = numpy.asarray(Q)
 
-  tmp = jax.jit(BruteForceKernel_, static_argnames=['lam','Q','A','mBhalf','C','targetleak','kCmin','kCmax','nbis'])
+  return BruteForceKernel_(lam,Q,A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53)
 
-  return tmp(lam,Q,A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53)
-
+@partial(gnool_jit, static_array_argnums=(0,1,2,3,4,5))
 def BruteForceKernel_(lam,Q,A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 
   # get dimensions and mPhalf matrix
