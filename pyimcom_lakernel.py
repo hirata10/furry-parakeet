@@ -3,7 +3,7 @@ import pyimcom_croutines
 import time
 import jax
 
-print('......lak3')
+print('......lak4')
 
 # 'Brute force' version of the kernel
 # Slow and useful only for comparisons
@@ -29,7 +29,7 @@ def BruteForceKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 
   tmp = jax.jit(BruteForceKernel_, static_argnames=['lam','Q','A','mBhalf','C','targetleak','kCmin','kCmax','nbis'])
 
-  return tmp
+  return tmp(lam,Q,A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53)
 
 def BruteForceKernel_(lam,Q,A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 
