@@ -21,13 +21,16 @@ print('......lak1')
 #   UC = fractional squared error in PSF, shape=(m,)
 #   T = coaddition matrix, shape=(m,n)
 #
-@jax.jit
 def BruteForceKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
-
   # eigensystem
   lam, Q = jax.numpy.linalg.eigh(A)
   lam = numpy.asarray(lam)
   Q = numpy.asarray(Q)
+
+  return BruteForceKernel_(lam,Q,A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53)
+
+@jax.jit
+def BruteForceKernel_(lam,Q,A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 
   # get dimensions and mPhalf matrix
   if mBhalf.ndim==2:
@@ -50,7 +53,7 @@ def BruteForceKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
 
   for k in range(nt):
     # -P/2 matrix
-    mPhalf = jax.numpy.matmul(mBhalf[k,:,:],Q)
+    mPhalf = numpy.matmul(mBhalf[k,:,:],Q)
 
     # now loop over pixels
     for a in range(m):
@@ -58,14 +61,14 @@ def BruteForceKernel(A,mBhalf,C,targetleak,kCmin=1e-16,kCmax=1e16,nbis=53):
       kappa[k,a] = numpy.sqrt(kCmax*kCmin)
       for ibis in range(nbis+1):
         factor = numpy.sqrt(factor)
-        UC[k,a] = 1-jax.numpy.sum((lam+2*kappa[k,a])/(lam+kappa[k,a])**2*mPhalf[a,:]**2)/C_s[k]
+        UC[k,a] = 1-numpy.sum((lam+2*kappa[k,a])/(lam+kappa[k,a])**2*mPhalf[a,:]**2)/C_s[k]
         if ibis!=nbis:
           if UC[k,a]>targetleak_s[k]:
             kappa[k,a] /= factor
           else:
             kappa[k,a] *= factor
-      T[k,a,:] = jax.numpy.matmul(Q,(mPhalf[a,:]/(lam+kappa[k,a])))
-      Sigma[k,a] = jax.numpy.sum((mPhalf[a,:]/(lam+kappa[k,a]))**2)
+      T[k,a,:] = numpy.matmul(Q,(mPhalf[a,:]/(lam+kappa[k,a])))
+      Sigma[k,a] = numpy.sum((mPhalf[a,:]/(lam+kappa[k,a]))**2)
 
     T[k,:,:] = T[k,:,:]@Q.T
 
