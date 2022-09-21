@@ -2,6 +2,7 @@ import numpy
 import pyimcom_croutines
 import time
 import jax
+from functools import partial
 
 print('......lak1')
 
