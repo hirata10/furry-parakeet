@@ -7,7 +7,7 @@ import pyimcom_lakernel
 import time
 from astropy.io import fits
 
-print('......4')
+print('......1')
 
 ##################################################
 ### Simple PSF models (for testing or outputs) ###
