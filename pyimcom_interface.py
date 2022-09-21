@@ -7,7 +7,7 @@ import pyimcom_lakernel
 import time
 from astropy.io import fits
 
-print('......3')
+print('......4')
 
 ##################################################
 ### Simple PSF models (for testing or outputs) ###
@@ -391,7 +391,7 @@ def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_ma
   for j in range(n_out): C[j] = psfobj.overlaparray[n_in+j,n_in+j,psfobj.nc,psfobj.nc]
 
   # generate matrices
-  (kappa_, Sigma_, UC_, T_) = pyimcom_lakernel.BruteForceKernel(A,mBhalf,C,numpy.array(targetleak),smax=smax)
+  (kappa_, Sigma_, UC_, T_) = pyimcom_lakernel.BruteForceKernel(A,mBhalf,C,numpy.array(targetleak))#,smax=smax)
 
   # this code was just for testing, only works for n_out = 1
   # (kappa_, Sigma_, UC_, T_) = pyimcom_lakernel.BruteForceKernel(A,mBhalf[0,:,:],C[0],targetleak[0])

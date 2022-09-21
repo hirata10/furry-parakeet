@@ -3,7 +3,7 @@ import pyimcom_croutines
 import time
 import jax
 
-print('......2')
+print('......lak4')
 
 # 'Brute force' version of the kernel
 # Slow and useful only for comparisons
