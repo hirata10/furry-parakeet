@@ -16,7 +16,7 @@ class HashableArrayWrapper:
             jax.numpy.all(jax.numpy.equal(self.val, other.val)))
 
 def gnool_jit(fun, static_array_argnums=()):
-  @partial(jit, static_argnums=static_array_argnums)
+  @partial(jax.jit, static_argnums=static_array_argnums)
   def callee(*args):
     args = list(args)
     for i in static_array_argnums:
