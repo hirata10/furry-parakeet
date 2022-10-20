@@ -1,0 +1,55 @@
+You can access these functions by calling:
+
+import pyimcom_interface
+
+There are a few types of functions:
+
+--- Simple PSF models ---
+
+You will likely need these only for simple test runs, since they don't correspond to the PSF of a real system.
+
+In each case, output is a (n,n) numpy array
+
+2D Gaussian PSF
+psf_gaussian(n,sigmax,sigmay)
+
+'Simple' Airy PSF convolved with tophat and Gaussian
+psf_simple_airy(n,ldp,tophat_conv=0.,sigma=0.)
+
+'Complex' Airy PSF with some artificial diffraction spikes and (if features>0) some messy features tacked on
+psf_cplx_airy(n,ldp,tophat_conv=0.,sigma=0.,features=0)
+
+--- Utilities ---
+
+These make (2,2) numpy array matrices:
+
+rotmatrix(theta)
+shearmatrix(g1,g2)
+
+--- PSF overlap class ---
+
+The PSF_Overlap class, called with
+
+pyimcom_interface.PSF_Overlap(psf_in_list, psf_out_list, dsample, nsample, s_in, distort_matrices=None)
+
+computes all of the inner products of various PSFs. This is an expensive operation if the PSFs are big, but if 
+the PSF is slowly varying, you may need to make a PSF_Overlap class only every 'few' output stamps. Therefore 
+its functionality is placed separately from the image combination routines.
+
+Then you want to call
+
+get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_matrices,
+  in_stamp_dscale, in_stamp_shape, out_stamp_dscale, out_stamp_shape, in_mask, tbdy_radius, smax=1., flat_penalty=0.)
+
+for each stamp that you co-add. This function returns a Python dictionary containing the image combination 
+matrix (T-matrix). (Note you can request more than one output PSF at a time if you want, but they all have to 
+have the same input mask.) There is also a lot of metadata that goes with it.
+
+The user can then use the T-matrix for any of the usual operations, like operating on a set of real data, 
+simulated data, noise images, etc. ... because the T-matrix only has to be built once, but storing all the 
+T-matrices for the full survey is likely prohibitive, I recommend processing on as many input images at the same 
+time as possible.
+
+Operations such as tiling many output postage stamps, identifying which input images overlap a given region, the 
+coordinate transformations to put them into the same system as the output images, etc. have to go in the calling 
+script; they are not part of pyimcom_interface.
