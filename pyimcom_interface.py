@@ -27,13 +27,14 @@ def psf_gaussian(n,sigmax,sigmay):
 # Airy spot, n x n, with lamda/D = ldp pixels,
 # and convolved with a tophat (square, full width tophat_conv)
 # and Gaussian (sigma)
+# and linear obscuration factor (obsc)
 #
 # result is centered on (n-1)/2,(n-1)/2 (so on a pixel if
 # n is odd and a corner if n is even)
 #
 # normalized to *sum* to unity if analytically extended
 #
-def psf_simple_airy(n,ldp,tophat_conv=0.,sigma=0.):
+def psf_simple_airy(n,ldp,obsc=0.,tophat_conv=0.,sigma=0.):
 
   # figure out pad size -- want to get to at least a tophat width and 6 sigmas
   kp = 1 + int(numpy.ceil(tophat_conv + 6*sigma))
@@ -47,7 +48,9 @@ def psf_simple_airy(n,ldp,tophat_conv=0.,sigma=0.):
   r = numpy.sqrt(x**2+y**2) / ldp # r in units of ldp
 
   # make Airy spot
-  I = (scipy.special.jv(0,numpy.pi*r)+scipy.special.jv(2,numpy.pi*r))**2 / (4.*ldp**2) * numpy.pi
+  I = (scipy.special.jv(0,numpy.pi*r)+scipy.special.jv(2,numpy.pi*r)
+      -obsc**2*(scipy.special.jv(0,numpy.pi*r*obsc)+scipy.special.jv(2,numpy.pi*r*obsc))
+      )**2 / (4.*ldp**2*(1-obsc**2)) * numpy.pi
 
   # now convolve
   It = numpy.fft.fft2(I)
@@ -149,7 +152,10 @@ class PSF_Overlap:
   # distort_matrices: list of 2x2 distortion matrices associated with the input PSFs
   #   in the form X(stacking frame) = (distortion_matrix) @ X(native frame)
   #
-  def __init__(self, psf_in_list, psf_out_list, dsample, nsample, s_in, distort_matrices=None):
+  # amp_penalty = experimental feature to change the weighting of Fourier modes
+  #  (do not use or set to None unless you are trying to do a test with it)
+  #
+  def __init__(self, psf_in_list, psf_out_list, dsample, nsample, s_in, distort_matrices=None, amp_penalty=None):
 
     # checking
     if nsample%2==0:
@@ -221,6 +227,14 @@ class PSF_Overlap:
     psf_array_pad = numpy.zeros((self.n_tot,nfft,nfft))
     psf_array_pad[:,:ns2,:ns2] = self.psf_array
     psf_array_pad_fft = numpy.fft.fft2(psf_array_pad)
+
+    if amp_penalty is not None:
+      u = numpy.linspace(0,1.-1/nfft,nfft)
+      u = numpy.where(u>.5,u-1,u)
+      ut = numpy.sqrt(u[:,None]**2+u[None,:]**2)
+      for ip in range(self.n_tot): psf_array_pad_fft[ip,:,:] *= 1. + amp_penalty['amp']*numpy.exp(-2*numpy.pi**2*ut**2*amp_penalty['sig']**2)
+
+    # ... continue FFT
     for ipsf in range(self.n_tot):
       for jpsf in range(0,ipsf+1,2):
         if ipsf==jpsf:

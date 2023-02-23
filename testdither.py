@@ -214,3 +214,5 @@ print('percentiles of sqrtUC, sqrtSigma, kappa:')
 for i in [1,2,5,10,25,50,75,90,95,98,99]:
   print('    {:2d}% {:11.5E} {:11.5E} {:11.5E}'.format(i, numpy.percentile(numpy.sqrt(ims['UC']),i), numpy.percentile(numpy.sqrt(ims['Sigma']),i),
     numpy.percentile(ims['kappa'],i) ))
+
+print('kappa range = {:11.5E}, {:11.5E}'.format(numpy.amin(ims['kappa']), numpy.amax(ims['kappa'])))
