@@ -1,0 +1,13 @@
+
+------------------------------------------------------------------------------
+v0.1 (March 12, 2023)
+
+Version of code as used for the initial papers:
+Hirata et al.
+``Simulating image coaddition with the Nancy Grace Roman Space 
+Telescope: I. Simulation methodology and general results''
+Yamamoto et al.
+``Simulating image coaddition with the Nancy Grace Roman Space 
+Telescope: II. Analysis of the simulated images and implications for 
+weak lensing''
+
