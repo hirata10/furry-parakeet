@@ -270,6 +270,7 @@ class PSF_Overlap:
 #   tbdy_radius = radius of boundary to clip pixels in input images
 #   smax = maximum allowed value of Sigma (1 if you want to avoid amplifying noise)
 #   flat_penalty = amount by which to penalize having different contributions to the output from different input images
+#   use_kappa_arr = None (default); if supplied, array of kappa must be in ascending order (length nv) for Cholesky decompositions
 #
 # Outputs: dictionary containing:
 #   Sigma = output noise amplification, shape=(n_out,ny_out,nx_out)
@@ -278,7 +279,8 @@ class PSF_Overlap:
 #       ... and the intermediate results kappa, A, mBhalf, C, fullmask
 #
 def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_matrices,
-  in_stamp_dscale, in_stamp_shape, out_stamp_dscale, out_stamp_shape, in_mask, tbdy_radius, smax=1., flat_penalty=0.):
+  in_stamp_dscale, in_stamp_shape, out_stamp_dscale, out_stamp_shape, in_mask, tbdy_radius, smax=1., flat_penalty=0.,
+  use_kappa_arr=None):
 
   # number of input and output images
   n_in = psfobj.n_in
@@ -287,6 +289,8 @@ def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_ma
   # get information
   (ny_in,nx_in) = in_stamp_shape
   (ny_out,nx_out) = out_stamp_shape
+
+  tm0 = time.perf_counter()
 
   # positions of the pixels
   xpos = numpy.zeros((n_in,ny_in,nx_in))
@@ -298,6 +302,8 @@ def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_ma
     yo[:,:] = numpy.linspace((1-ny_in)/2, (ny_in-1)/2, ny_in)[:,None]
     xpos[i,:,:] = in_stamp_dscale*(distort_matrices[i][0,0]*xo + distort_matrices[i][0,1]*yo) + ctrpos[i][0]
     ypos[i,:,:] = in_stamp_dscale*(distort_matrices[i][1,0]*xo + distort_matrices[i][1,1]*yo) + ctrpos[i][1]
+
+  tm1 = time.perf_counter()
 
   # mask information and table
   if in_mask is None:
@@ -330,6 +336,8 @@ def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_ma
     my_x += [xpos[i,masklayers[i][0],masklayers[i][1]].flatten()]
     my_y += [ypos[i,masklayers[i][0],masklayers[i][1]].flatten()]
 
+  tm2 = time.perf_counter()
+
   # build optimization matrices
   A = numpy.zeros((n_all,n_all))
   mBhalf = numpy.zeros((n_out, nx_out*ny_out, n_all))
@@ -345,8 +353,18 @@ def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_ma
         ddx[:,:] = my_x[i][:,None] - my_x[j][None,:]
         ddy[:,:] = my_y[i][:,None] - my_y[j][None,:]
         out1 = numpy.zeros((1,ngood[i]*ngood[j]))
-        pyimcom_croutines.iD5512C(psfobj.overlaparray[i,j,:,:].reshape((1,psfobj.nsample,psfobj.nsample)),
-          ddx.flatten()/s+psfobj.nc, ddy.flatten()/s+psfobj.nc, out1)
+        #
+        # bounding box calculation, in interpolation (psfobj) pixels
+        my_xmax = (numpy.amax(my_x[i]) - numpy.amin(my_x[j]))/s
+        my_xmin = (numpy.amin(my_x[i]) - numpy.amax(my_x[j]))/s
+        my_ymax = (numpy.amax(my_y[i]) - numpy.amin(my_y[j]))/s
+        my_ymin = (numpy.amin(my_y[i]) - numpy.amax(my_y[j]))/s
+        if j==i:
+          pyimcom_croutines.iD5512C_sym(psfobj.overlaparray[i,j,:,:].reshape((1,psfobj.nsample,psfobj.nsample)),
+            ddx.flatten()/s+psfobj.nc, ddy.flatten()/s+psfobj.nc, out1)
+        else:
+          pyimcom_croutines.iD5512C(psfobj.overlaparray[i,j,:,:].reshape((1,psfobj.nsample,psfobj.nsample)),
+            ddx.flatten()/s+psfobj.nc, ddy.flatten()/s+psfobj.nc, out1)
         A[nstart[i]:nstart[i+1],nstart[j]:nstart[j+1]] = out1.reshape((ngood[i],ngood[j]))
 
       else:
@@ -365,31 +383,50 @@ def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_ma
   A = (A+A.T)/2.
   # end A matrix
 
+  tm3 = time.perf_counter()
+
   # now the mBhalf matrix
   # first get output pixel positions
-  xout = numpy.zeros((ny_out,nx_out))
-  yout = numpy.zeros((ny_out,nx_out))
-  xout[:,:] = numpy.linspace((1-nx_out)/2, (nx_out-1)/2, nx_out)[None,:] * out_stamp_dscale
-  yout[:,:] = numpy.linspace((1-ny_out)/2, (ny_out-1)/2, ny_out)[:,None] * out_stamp_dscale
-  xout = xout.flatten()
-  yout = yout.flatten()
+  #xout = numpy.zeros((ny_out,nx_out))
+  #yout = numpy.zeros((ny_out,nx_out))
+  #xout[:,:] = numpy.linspace((1-nx_out)/2, (nx_out-1)/2, nx_out)[None,:] * out_stamp_dscale
+  #yout[:,:] = numpy.linspace((1-ny_out)/2, (ny_out-1)/2, ny_out)[:,None] * out_stamp_dscale
+  #xout = xout.flatten()
+  #yout = yout.flatten()
+  #for i in range(n_in):
+  #  for j in range(n_out):
+  #    ddx = numpy.zeros((ngood[i],ny_out*nx_out))
+  #    ddy = numpy.zeros((ngood[i],ny_out*nx_out))
+  #    ddx[:,:] = my_x[i][:,None] - xout[None,:]
+  #    ddy[:,:] = my_y[i][:,None] - yout[None,:]
+  #    out1 = numpy.zeros((1,ngood[i]*ny_out*nx_out))
+  #    pyimcom_croutines.iD5512C(psfobj.overlaparray[i,psfobj.n_in+j,:,:].reshape((1,psfobj.nsample,psfobj.nsample)),
+  #      ddx.flatten()/s+psfobj.nc, ddy.flatten()/s+psfobj.nc, out1)
+  #    mBhalf[j,:,nstart[i]:nstart[i+1]] = out1.reshape((ngood[i],ny_out*nx_out)).T
+
   for i in range(n_in):
+    ddx = numpy.zeros((ngood[i],nx_out))
+    ddx[:,:] = my_x[i][:,None] - numpy.linspace((1-nx_out)/2, (nx_out-1)/2, nx_out)[None,:] * out_stamp_dscale
+    ddy = numpy.zeros((ngood[i],ny_out))
+    ddy[:,:] = my_y[i][:,None] - numpy.linspace((1-ny_out)/2, (ny_out-1)/2, ny_out)[None,:] * out_stamp_dscale
+    out1 = numpy.zeros((ngood[i],ny_out*nx_out))
     for j in range(n_out):
-      ddx = numpy.zeros((ngood[i],ny_out*nx_out))
-      ddy = numpy.zeros((ngood[i],ny_out*nx_out))
-      ddx[:,:] = my_x[i][:,None] - xout[None,:]
-      ddy[:,:] = my_y[i][:,None] - yout[None,:]
-      out1 = numpy.zeros((1,ngood[i]*ny_out*nx_out))
-      pyimcom_croutines.iD5512C(psfobj.overlaparray[i,psfobj.n_in+j,:,:].reshape((1,psfobj.nsample,psfobj.nsample)),
-        ddx.flatten()/s+psfobj.nc, ddy.flatten()/s+psfobj.nc, out1)
-      mBhalf[j,:,nstart[i]:nstart[i+1]] = out1.reshape((ngood[i],ny_out*nx_out)).T
+      pyimcom_croutines.gridD5512C(psfobj.overlaparray[i,psfobj.n_in+j,:,:], ddx/s+psfobj.nc, ddy/s+psfobj.nc, out1)
+      mBhalf[j,:,nstart[i]:nstart[i+1]] = out1.T
+
+  tm4 = time.perf_counter()
 
   # and C
   C = numpy.zeros((n_out,))
   for j in range(n_out): C[j] = psfobj.overlaparray[n_in+j,n_in+j,psfobj.nc,psfobj.nc]
 
   # generate matrices
-  (kappa_, Sigma_, UC_, T_) = pyimcom_lakernel.CKernelMulti(A,mBhalf,C,numpy.array(targetleak),smax=smax)
+  tm5 = time.perf_counter()
+  if use_kappa_arr is None:
+    (kappa_, Sigma_, UC_, T_) = pyimcom_lakernel.CKernelMulti(A,mBhalf,C,numpy.array(targetleak),smax=smax)
+  else:
+    (kappa_, Sigma_, UC_, T_) = pyimcom_lakernel.get_coadd_matrix_discrete(A,mBhalf,C,use_kappa_arr,numpy.array(targetleak),smax=smax)
+  tm6 = time.perf_counter()
 
   # this code was just for testing, only works for n_out = 1
   # (kappa_, Sigma_, UC_, T_) = pyimcom_lakernel.BruteForceKernel(A,mBhalf[0,:,:],C[0],targetleak[0])
@@ -405,6 +442,10 @@ def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_ma
   for i in range(n_in):
     for k in range(ngood[i]):
       T[:,:,:,i,masklayers[i][0][k],masklayers[i][1][k]] = T_[:,:,nstart[i]+k].reshape((n_out,ny_out,nx_out))
+
+  tm7 = time.perf_counter()
+  print('times: {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f}'.format(
+    tm1-tm0, tm2-tm0, tm3-tm0, tm4-tm0, tm5-tm0, tm6-tm0, tm7-tm0))
 
   return {
     'Sigma': Sigma,
