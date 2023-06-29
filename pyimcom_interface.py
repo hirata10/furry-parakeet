@@ -1,5 +1,6 @@
 import numpy
 import scipy
+import scipy.fft
 import scipy.signal
 import scipy.special
 import pyimcom_croutines
@@ -163,6 +164,8 @@ class PSF_Overlap:
 
     self.s_in=s_in
 
+    tm0 = time.perf_counter()
+
     # number of PSFs
     self.n_in = len(psf_in_list)
     self.n_out = len(psf_out_list)
@@ -209,6 +212,8 @@ class PSF_Overlap:
         xco.flatten()+xctr+p/2, yco.flatten()+yctr+p/2, out_array)
       self.psf_array[ipsf,:,:] = out_array.reshape((ns2,ns2))
 
+    tm1 = time.perf_counter()
+
     # ... and the output PSFs
     for ipsf in range(self.n_out):
       # get center
@@ -220,13 +225,46 @@ class PSF_Overlap:
         xo.flatten()+xctr+p/2, yo.flatten()+yctr+p/2, out_array)
       self.psf_array[self.n_in+ipsf,:,:] = out_array.reshape((ns2,ns2))
 
+    tm2 = time.perf_counter()
+
     # FFT based method for overlaps
-    nfft = 2**(1+int(numpy.ceil(numpy.log2(ns2-.5))))
-    if 3*nfft//4>2*ns2: nfft=3*nfft//4
+    nfft = nfft0 = 2**(1+int(numpy.ceil(numpy.log2(ns2-.5))))
+    if 7*nfft0//8>2*ns2: nfft=7*nfft0//8
+    if 3*nfft0//4>2*ns2: nfft=3*nfft0//4
+    if 5*nfft0//8>2*ns2: nfft=5*nfft0//8
     b = nsample//2
-    psf_array_pad = numpy.zeros((self.n_tot,nfft,nfft))
-    psf_array_pad[:,:ns2,:ns2] = self.psf_array
-    psf_array_pad_fft = numpy.fft.fft2(psf_array_pad)
+    #
+    # this replaces the following simpler but more time-consuming code:
+    #psf_array_pad = numpy.zeros((self.n_tot,nfft,nfft))
+    #psf_array_pad[:,:ns2,:ns2] = self.psf_array
+    #psf_array_pad_fft = numpy.fft.fft2(psf_array_pad)
+    #
+    psf_array_pad_fft = numpy.zeros((self.n_tot,nfft,nfft), dtype=numpy.complex128)
+    if self.n_tot>=2:
+      # do these in pairs
+      arC_ft_rev = numpy.zeros((nfft,nfft), dtype=numpy.complex128)
+      for j in range(self.n_tot//2):
+        arC = numpy.zeros((nfft,nfft), dtype=numpy.complex128)
+        arC[:ns2,:ns2].real = .5*self.psf_array[2*j,:,:]
+        arC[:ns2,:ns2].imag = .5*self.psf_array[2*j+1,:,:]
+        arC_ft = scipy.fft.fft2(arC)
+        arC_ft_rev[0,0] = arC_ft[0,0]
+        arC_ft_rev[0,1:] = arC_ft[0,:0:-1]
+        arC_ft_rev[1:,0] = arC_ft[:0:-1,0]
+        arC_ft_rev[1:,1:] = arC_ft[:0:-1,:0:-1]
+        psf_array_pad_fft[2*j,:,:].real = arC_ft.real + arC_ft_rev.real
+        psf_array_pad_fft[2*j,:,:].imag = arC_ft.imag - arC_ft_rev.imag
+        psf_array_pad_fft[2*j+1,:,:].real = arC_ft.imag + arC_ft_rev.imag
+        psf_array_pad_fft[2*j+1,:,:].imag = arC_ft_rev.real - arC_ft.real
+      del arC
+      del arC_ft
+      del arC_ft_rev
+    if (self.n_tot%2==1):
+      # take care of odd case at the end
+      psf_array_pad = numpy.zeros((nfft,nfft))
+      psf_array_pad[:ns2,:ns2] = self.psf_array[-1,:,:]
+      psf_array_pad_fft[-1,:,:] = scipy.fft.fft2(psf_array_pad)
+      del psf_array_pad
 
     if amp_penalty is not None:
       u = numpy.linspace(0,1.-1/nfft,nfft)
@@ -234,23 +272,33 @@ class PSF_Overlap:
       ut = numpy.sqrt(u[:,None]**2+u[None,:]**2)
       for ip in range(self.n_tot): psf_array_pad_fft[ip,:,:] *= 1. + amp_penalty['amp']*numpy.exp(-2*numpy.pi**2*ut**2*amp_penalty['sig']**2)
 
+    tm3 = time.perf_counter()
+
     # ... continue FFT
     for ipsf in range(self.n_tot):
       for jpsf in range(0,ipsf+1,2):
         if ipsf==jpsf:
-          ift = numpy.fft.ifftshift(numpy.fft.ifft2(psf_array_pad_fft[ipsf,:,:]*
-            numpy.conjugate(psf_array_pad_fft[jpsf,:,:])))
-          self.overlaparray[ipsf,jpsf,:,:] = numpy.real(ift[nfft//2-b:nfft//2+b+1,nfft//2-b:nfft//2+b+1])
+          ift = numpy.fft.ifftshift(scipy.fft.ifft2(psf_array_pad_fft[ipsf,:,:].real**2+psf_array_pad_fft[ipsf,:,:].imag**2))
+          self.overlaparray[ipsf,ipsf,:,:] = ift[nfft//2-b:nfft//2+b+1,nfft//2-b:nfft//2+b+1].real
         else:
-          ift = numpy.fft.ifftshift(numpy.fft.ifft2(psf_array_pad_fft[ipsf,:,:]*
+          ift = numpy.fft.ifftshift(scipy.fft.ifft2(psf_array_pad_fft[ipsf,:,:]*
             numpy.conjugate(psf_array_pad_fft[jpsf,:,:]-1j*psf_array_pad_fft[jpsf+1,:,:])))
-          self.overlaparray[ipsf,jpsf,:,:] = numpy.real(ift[nfft//2-b:nfft//2+b+1,nfft//2-b:nfft//2+b+1])
-          self.overlaparray[ipsf,jpsf+1,:,:] = numpy.imag(ift[nfft//2-b:nfft//2+b+1,nfft//2-b:nfft//2+b+1])
+          self.overlaparray[ipsf,jpsf,:,:] = ift[nfft//2-b:nfft//2+b+1,nfft//2-b:nfft//2+b+1].real
+          self.overlaparray[ipsf,jpsf+1,:,:] = ift[nfft//2-b:nfft//2+b+1,nfft//2-b:nfft//2+b+1].imag
+
+    tm4 = time.perf_counter()
 
     # the 'above diagonal' can be obtained by flipping
     for ipsf in range(1,self.n_tot):
       for jpsf in range(ipsf):
         self.overlaparray[jpsf,ipsf,:,:] = self.overlaparray[ipsf,jpsf,::-1,::-1]
+
+    tm5 = time.perf_counter()
+    #print('psf timing: {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f}'.format(
+    #  tm1-tm0, tm2-tm0, tm3-tm0, tm4-tm0, tm5-tm0))
+
+    # extract C, the overlaps of the output PSFs
+    self.C = numpy.diag(self.overlaparray[-self.n_out:,-self.n_out:,b,b])
 
   # ### <-- end __init__ here ###
 
@@ -444,8 +492,8 @@ def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_ma
       T[:,:,:,i,masklayers[i][0][k],masklayers[i][1][k]] = T_[:,:,nstart[i]+k].reshape((n_out,ny_out,nx_out))
 
   tm7 = time.perf_counter()
-  print('times: {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f}'.format(
-    tm1-tm0, tm2-tm0, tm3-tm0, tm4-tm0, tm5-tm0, tm6-tm0, tm7-tm0))
+  #print('times: {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f}'.format(
+  #  tm1-tm0, tm2-tm0, tm3-tm0, tm4-tm0, tm5-tm0, tm6-tm0, tm7-tm0))
 
   return {
     'Sigma': Sigma,

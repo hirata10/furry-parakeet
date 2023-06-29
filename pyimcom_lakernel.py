@@ -158,14 +158,14 @@ def get_coadd_matrix_discrete(A, mBhalf, C, kappa_array, ucmin, smax=0.5):
     else:
       AA[di] += kappa_array[0]
     try:
-      L[j,:,:] = numpy.linalg.cholesky(AA)
+      L[j,:,:] = scipy.linalg.cholesky(AA, lower=True, check_finite=False)
     except:
       # if matrix is not quite positive definite, we can rectify it
       w, v = numpy.linalg.eigh(A)
       AA[di] += kappa_array[j] + numpy.abs(w[0])
       del v
       #warnings.warn('Warning: pyimcom_lakernel Cholesky decomposition failed; fixed negative eigenvalue {:19.12e}'.format(w[0]))
-      L[j,:,:] = numpy.linalg.cholesky(AA)
+      L[j,:,:] = scipy.linalg.cholesky(AA, lower=True, check_finite=False)
   del AA; del di
 
   # outputs
