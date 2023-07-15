@@ -279,6 +279,7 @@ static PyObject *pyimcom_iD5512C(PyObject *self, PyObject *args) {
 
   free((char*)locdata);
 
+  Py_INCREF(Py_None);
   return(Py_None);
   /* -- this is the end of the function if it executed normally -- */
 }
@@ -425,6 +426,7 @@ static PyObject *pyimcom_iD5512C_sym(PyObject *self, PyObject *args) {
 
   free((char*)locdata);
 
+  Py_INCREF(Py_None);
   return(Py_None);
   /* -- this is the end of the function if it executed normally -- */
 }
@@ -606,6 +608,7 @@ static PyObject *pyimcom_gridD5512C(PyObject *self, PyObject *args) {
 
   free((char*)locdata);
 
+  Py_INCREF(Py_None);
   return(Py_None);
   /* -- this is the end of the function if it executed normally -- */
 }

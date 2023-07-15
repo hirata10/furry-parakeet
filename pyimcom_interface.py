@@ -294,8 +294,8 @@ class PSF_Overlap:
         self.overlaparray[jpsf,ipsf,:,:] = self.overlaparray[ipsf,jpsf,::-1,::-1]
 
     tm5 = time.perf_counter()
-    #print('psf timing: {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f}'.format(
-    #  tm1-tm0, tm2-tm0, tm3-tm0, tm4-tm0, tm5-tm0))
+    print('psf timing: {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f}'.format(
+      tm1-tm0, tm2-tm0, tm3-tm0, tm4-tm0, tm5-tm0))
 
     # extract C, the overlaps of the output PSFs
     self.C = numpy.diag(self.overlaparray[-self.n_out:,-self.n_out:,b,b])
@@ -319,6 +319,14 @@ class PSF_Overlap:
 #   smax = maximum allowed value of Sigma (1 if you want to avoid amplifying noise)
 #   flat_penalty = amount by which to penalize having different contributions to the output from different input images
 #   use_kappa_arr = None (default); if supplied, array of kappa must be in ascending order (length nv) for Cholesky decompositions
+#   choose_outputs = 'CKMSTU' (default); which outputs to report:
+#      A, B, C = IMCOM matrices
+#      K = kappa (Lagrange multiplier map)
+#      M = coaddition input pixel mask
+#      S = noise map
+#      T = coaddition matrix
+#      U = PSF leakage map (U_alpha/C)
+#     (A and B are large and I don't try to save them if we aren't going to use them)
 #
 # Outputs: dictionary containing:
 #   Sigma = output noise amplification, shape=(n_out,ny_out,nx_out)
@@ -328,7 +336,7 @@ class PSF_Overlap:
 #
 def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_matrices,
   in_stamp_dscale, in_stamp_shape, out_stamp_dscale, out_stamp_shape, in_mask, tbdy_radius, smax=1., flat_penalty=0.,
-  use_kappa_arr=None):
+  use_kappa_arr=None, choose_outputs='CKMSTU'):
 
   # number of input and output images
   n_in = psfobj.n_in
@@ -480,31 +488,40 @@ def get_coadd_matrix(psfobj, psf_oversamp_factor, targetleak, ctrpos, distort_ma
   # (kappa_, Sigma_, UC_, T_) = pyimcom_lakernel.BruteForceKernel(A,mBhalf[0,:,:],C[0],targetleak[0])
   # T_ = T_.reshape(1,ny_out*nx_out,nstart[n_in])
 
+  # start building the output dictionary
+  returndata = {}
+  if 'A' in choose_outputs.upper():
+    returndata['A'] = A
+  else:
+    del A
+  if 'B' in choose_outputs.upper():
+    returndata['mBhalf'] = mBhalf
+  else:
+    del mBhalf
+  if 'C' in choose_outputs.upper(): returndata['C'] = C
+  if 'M' in choose_outputs.upper(): returndata['full_mask'] = full_mask
+
   # post processing
-  kappa = kappa_.reshape((n_out,ny_out,nx_out))
-  Sigma = Sigma_.reshape((n_out,ny_out,nx_out))
-  UC = UC_.reshape((n_out,ny_out,nx_out))
-  #
+  kappa = kappa_.reshape((n_out,ny_out,nx_out)); del kappa_
+  Sigma = Sigma_.reshape((n_out,ny_out,nx_out)); del Sigma_
+  UC = UC_.reshape((n_out,ny_out,nx_out)); del UC_
+  # ... and save
+  if 'K' in choose_outputs.upper(): returndata['kappa'] = kappa
+  if 'S' in choose_outputs.upper(): returndata['Sigma'] = Sigma
+  if 'U' in choose_outputs.upper(): returndata['UC'] = UC
+
   # for T: (nt,m,n) --> (n_out,ny_out,nx_out,n_in,ny_in,nx_in)
-  T = numpy.zeros((n_out,ny_out,nx_out,n_in,ny_in,nx_in))
+  T = numpy.zeros((n_out,ny_out,nx_out,n_in,ny_in,nx_in), dtype=numpy.float32)
   for i in range(n_in):
     for k in range(ngood[i]):
       T[:,:,:,i,masklayers[i][0][k],masklayers[i][1][k]] = T_[:,:,nstart[i]+k].reshape((n_out,ny_out,nx_out))
+  if 'T' in choose_outputs.upper(): returndata['T'] = T
 
   tm7 = time.perf_counter()
-  #print('times: {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f}'.format(
-  #  tm1-tm0, tm2-tm0, tm3-tm0, tm4-tm0, tm5-tm0, tm6-tm0, tm7-tm0))
+  print('times: {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f} {:7.4f}'.format(
+    tm1-tm0, tm2-tm0, tm3-tm0, tm4-tm0, tm5-tm0, tm6-tm0, tm7-tm0))
 
-  return {
-    'Sigma': Sigma,
-    'UC': UC,
-    'T': T,
-    'kappa': kappa,
-    'A': A,
-    'mBhalf': mBhalf,
-    'C': C,
-    'full_mask': full_mask
-  }
+  return returndata
 
 # Function to creat input postage stamps of point sources of unit flux and coadd them to test the PSF matrices.
 #
