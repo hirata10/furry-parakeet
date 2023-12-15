@@ -148,7 +148,7 @@ if badfrac>0:
 
 # and now make a coadd matrix
 t1c = time.perf_counter()
-ims = pyimcom_interface.get_coadd_matrix(P, float(nps), [uctarget**2], posoffset, mlist, s_in, (ny_in,nx_in), s_out, (ny_out,nx_out), inmask, extbdy, smax=1./n_in, flat_penalty=flat_penalty)
+ims = pyimcom_interface.get_coadd_matrix(P, float(nps), [uctarget**2], posoffset, mlist, s_in, (ny_in,nx_in), s_out, (ny_out,nx_out), inmask, extbdy, smax=1./n_in, flat_penalty=flat_penalty, choose_outputs='ABCKMSTU')
 t1d = time.perf_counter()
 print('timing coadd matrix: ', t1d-t1c)
 
