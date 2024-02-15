@@ -10,22 +10,13 @@ If you want to use the Intel Math Kernel Library, set the MKL_CFLAGS and MKL_LIB
 
 Then do the setup:
 
-python setup.py clean --all
-python setup.py build
-python setup.py install --prefix=~/local/furry-parakeet/
+pip install --use-feature=in-tree-build .
 
-(You may change the prefix to your install location.)
-
-To use the kernel, you will first want to include furry-parakeet in your PYTHONPATH:
-
-export PYTHONPATH=$PYTHONPATH:~/local/furry-parakeet/lib/python3.7/site-packages
-
-(or the appropriate path in your environment) and then you can import it:
-
-import pyimcom_lakernel
+This will install pyimcom_croutines, pyimcom_lakernel, and pyimcom_interface.
 
 If you want you can try interpolating a plane wave:
 
+import pyimcom_lakernel
 pyimcom_lakernel.testkernel(3.,[.2,.1])
 
 To use the interface to coadd images, you can try
@@ -38,3 +29,6 @@ You can do an example by making the 'out/' directory and using the testdither.py
 
 python testdither.py sample_config.txt
 
+If you want to remove these routines, you can use:
+
+pip uninstall furryparakeet
