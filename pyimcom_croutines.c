@@ -4,6 +4,7 @@
 
 #ifdef IS_TIMING
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #endif
 
@@ -614,6 +615,84 @@ static PyObject *pyimcom_gridD5512C(PyObject *self, PyObject *args) {
 }
 
 /*
+ * ====== INTERPOLATION FUNCTIONS FOR DESTRIPING =======
+ */
+
+ /* Forward and Transpose interpolation functions
+ *
+ * Inputs:
+ * image = pointer to the input image data
+ * rows, cols = dimensions of the image
+ * coords = pointer to the array of coordinates (x,y) in image A coordinate system, to interpolate B onto
+ * num_coords = number of provided coordinate pairs
+
+ *
+ * Outputs:
+ * > interpolated_image = pointer to output array for interpolated values
+ * > weight_matrix = pointer to the array for storing weights
+ * > original_image = pointer for the output of transpose interpolation
+
+ */
+
+void bilinear_interpolation_with_weights(float* image, int rows, int cols, float* coords, int num_coords, float* interpolated_image, float* weight_matrix) {
+    for (int k = 0; k < num_coords; ++k) { //iterate through coordinate pairs
+        float x = coords[2 * k];
+        float y = coords[2 * k + 1];
+
+        // Calculate the indices of the four surrounding pixels
+        int x1 = (int)floor(x);
+        int y1 = (int)floor(y);
+        int x2 = x1 + 1;
+        int y2 = y1 + 1;
+
+        if (x1 < 0 || x2 >= rows || y1 < 0 || y2 >= cols) {
+            continue; // Skip out-of-bounds; Might want to change this later?
+        }
+
+        // Compute fractional distances from x1 and y1
+        float dx = x - x1;
+        float dy = y - y1;
+
+        // Compute contributions
+        interpolated_image[x1 * cols + y1] += (1 - dx) * (1 - dy) * image[x1 * cols + y1];
+        weight_matrix[x1 * cols + y1] += (1 - dx) * (1 - dy);
+
+        interpolated_image[x1 * cols + y2] += (1 - dx) * dy * image[x1 * cols + y1];
+        weight_matrix[x1 * cols + y2] += (1 - dx) * dy;
+
+        interpolated_image[x2 * cols + y1] += dx * (1 - dy) * image[x1 * cols + y1];
+        weight_matrix[x2 * cols + y1] += dx * (1 - dy);
+
+        interpolated_image[x2 * cols + y2] += dx * dy * image[x1 * cols + y1];
+        weight_matrix[x2 * cols + y2] += dx * dy;
+    }
+}
+
+void bilinear_transpose(float* image, float* weight_matrix, int rows, int cols, float* coords, int num_coords, float* original_image) {
+    for (int k = 0; k < num_coords; ++k) {
+        float x = coords[2 * k];
+        float y = coords[2 * k + 1];
+
+        int x1 = (int)floor(x);
+        int y1 = (int)floor(y);
+        int x2 = x1 + 1;
+        int y2 = y1 + 1;
+
+        if (x1 < 0 || x2 >= rows || y1 < 0 || y2 >= cols) {
+            continue; // Skip out-of-bounds
+        }
+
+        // Accumulate contributions based on weights
+        original_image[x1 * cols + y1] += (1 - (x - x1)) * (1 - (y - y1)) * weight_matrix[x1 * cols + y1];
+        original_image[x1 * cols + y2] += (1 - (x - x1)) * (y - y1) * weight_matrix[x1 * cols + y2];
+        original_image[x2 * cols + y1] += (x - x1) * (1 - (y - y1)) * weight_matrix[x2 * cols + y1];
+        original_image[x2 * cols + y2] += (x - x1) * (y - y1) * weight_matrix[x2 * cols + y2];
+    }
+}
+
+
+
+/*
  * ===== ROUTINES FOR KAPPA INTERPOLATION =====
  */
 
@@ -928,6 +1007,8 @@ static PyMethodDef PyImcom_CMethods[] = {
   {"iD5512C_sym", (PyCFunction)pyimcom_iD5512C_sym, METH_VARARGS, "interpolation routine"},
   {"gridD5512C", (PyCFunction)pyimcom_gridD5512C, METH_VARARGS, "interpolation routine regular grid"},
   {"build_reduced_T_wrap", (PyCFunction)pyimcom_build_reduced_T_wrap, METH_VARARGS, "fast approximate coadd matrix"},
+  {"bilinear_interpolation_with_weights", (PyCFunction)bilinear_interpolation_with_weights, METH_VARARGS, "Interpolate image B onto image A"},
+  {"bilinear_transpose", (PyCFunction)bilinear_transpose, METH_VARARGS, "Transpose interpolation"},
   /* more functions, if needed */
   {NULL, NULL, 0, NULL} /* end */
 };
