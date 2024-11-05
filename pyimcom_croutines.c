@@ -678,6 +678,10 @@ void bilinear_transpose(float* image, int rows, int cols, float* coords, int num
             continue; // Skip out-of-bounds
         }
 
+        // Compute fractional distances from x1 and y1
+        float dx = x - x1;
+        float dy = y - y1;
+
         // Accumulate contributions based on weights
         original_image[y1 * cols + x1] += (1 - (x - x1)) * (1 - (y - y1)) * (1 - dx) * (1 - dy);
         original_image[y1 * cols + x2] += (1 - (x - x1)) * (y - y1) * (1 - dx) * dy;
@@ -1003,7 +1007,7 @@ static PyMethodDef PyImcom_CMethods[] = {
   {"iD5512C_sym", (PyCFunction)pyimcom_iD5512C_sym, METH_VARARGS, "interpolation routine"},
   {"gridD5512C", (PyCFunction)pyimcom_gridD5512C, METH_VARARGS, "interpolation routine regular grid"},
   {"build_reduced_T_wrap", (PyCFunction)pyimcom_build_reduced_T_wrap, METH_VARARGS, "fast approximate coadd matrix"},
-  {"bilinear_interpolation_with_weights", (PyCFunction)bilinear_interpolation_with_weights, METH_VARARGS, "Interpolate image B onto image A"},
+  {"bilinear_interpolation", (PyCFunction)bilinear_interpolation, METH_VARARGS, "Interpolate image B onto image A"},
   {"bilinear_transpose", (PyCFunction)bilinear_transpose, METH_VARARGS, "Transpose interpolation"},
   /* more functions, if needed */
   {NULL, NULL, 0, NULL} /* end */
