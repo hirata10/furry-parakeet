@@ -2,15 +2,44 @@ You first need to make the file:
 
 IncludePaths.txt
 
-that lists the path for the numpy C header. On OSC, this is
+that lists the path for the numpy C header. The path will depend on your environment's default 
+
+version of numpy; you can check which version of numpy is being used by default in your 
+
+environment by typing:
+
+python -c "import numpy; print(numpy.__file__)"
+
+This will result in some /path/site-packages/numpy. You should copy and paste this into 
+
+IncludePaths.txt but append /core/include/numpy/ on the end of it. Example: for Python
+
+3.7 on OSC, this is
 
 /apps/python/3.7-2019.10/lib/python3.7/site-packages/numpy/core/include/numpy/
 
+Note: some versions of numpy have the core directory as /core and some have it as /_core. Make sure
+
+you have the correct path to the numpy C headers before proceeding.
+
 If you want to use the Intel Math Kernel Library, set the MKL_CFLAGS and MKL_LIBS environment variables.
 
-Then do the setup:
+Finally, setup.py is configured for an older version of the setuptools package, so make sure to
+
+pip install setuptools==56.0.0
+
+before proceeding.
+
+
+Then check your version of pip (pip --version) and do the setup:
 
 pip install --use-feature=in-tree-build .
+
+for pip 21.3 <= version < 23.0, or
+
+pip install .
+
+for pip version >= 23.0. (in-tree-build was integrated into pip as the default behavior in v23.0).
 
 This will install pyimcom_croutines, pyimcom_lakernel, and pyimcom_interface.
 
