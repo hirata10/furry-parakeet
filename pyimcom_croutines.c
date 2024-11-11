@@ -618,20 +618,18 @@ static PyObject *pyimcom_gridD5512C(PyObject *self, PyObject *args) {
  * ====== INTERPOLATION FUNCTIONS FOR DESTRIPING =======
  */
 
- /* Forward and Transpose interpolation functions
+ /* Forward interpolation function
  *
  * Inputs:
  * image = pointer to the input image data (image to-be-interpolated; image "B")
- * g_eff = pointer to the input image pixel response matrix
- * rows, cols = dimensions of the image
+ * g_eff = pointer to the input image pixel response matrix (image "B" g_eff)
+ * rows, cols = dimensions of the images
  * coords = pointer to the array of coordinates (x,y) to be interpolated onto (image "A" coords)
  * num_coords = number of provided coordinate pairs
 
  *
  * Outputs:
- * > interpolated_image = pointer to output array for interpolated values
- * > original_image = pointer for the output of transpose interpolation
-
+ * > interpolated_image = pointer to output array for interpolated values. I_B interpolated onto I_A grid
  */
 
 void bilinear_interpolation(float* image, float* g_eff, int rows, int cols, float* coords, int num_coords, float* interpolated_image) {
@@ -655,18 +653,29 @@ void bilinear_interpolation(float* image, float* g_eff, int rows, int cols, floa
 
         // Compute weights
 
-        // Compute contributions; image_A_interp[pixel] = (weight)*(image_B[pixel])*(g_eff_B[pixel])
-        interpolated_image[y1 * cols + x1] += (1 - dx) * (1 - dy) * image[y1 * cols + x1] * g_eff[y1 * cols + x1];
-
-        interpolated_image[y1 * cols + x2] += (1 - dx) * dy * image[y1 * cols + x2] * g_eff[y1 * cols + x2];
-
-        interpolated_image[y2 * cols + x1] += dx * (1 - dy) * image[y2 * cols + x1] * g_eff[y2 * cols + x1];
-
-        interpolated_image[y2 * cols + x2] += dx * dy * image[y2 * cols + x2] * g_eff[y2 * cols + x2];
+        // Compute contributions; image_A_interp[pixel] = (weight)*(image_B[contributing_pixel])*(g_eff_B[contributing_pixel])
+        interpolated_image[k] =
+            (1 - dx) * (1 - dy) * image[y1 * cols + x1] * g_eff[y1 * cols + x1]
+            + (1 - dx) * dy * image[y2 * cols + x1] * g_eff[y2 * cols + x1]
+            + (1 - dy) * dx * image[y1 * cols + x2] * g_eff[y1 * cols + x2]
+            + dx * dy * image[y2 * cols + x2] * g_eff[y2 * cols + x2];
     }
 }
+ /*  Transpose interpolation function
+ *
+ * Inputs:
+ * image = pointer to the gradient image data (gradient image to-be-transpose-interpolated; image "gradient_interpolated")
+ * rows, cols = dimensions of the image
+ * coords = pointer to the array of coordinates (x,y) to be interpolated onto (image "B" coords)
+ * num_coords = number of provided coordinate pairs
 
-void bilinear_transpose(float* image, float* g_eff, int rows, int cols, float* coords, int num_coords, float* original_image) {
+ *
+ * Outputs:
+ * > original_image = pointer for the output of transpose interpolation (gradient image interpolated onto image "B" grid)
+
+ */
+void bilinear_transpose(float* image, int rows, int cols, float* coords, int num_coords, float* original_image) {
+
     for (int k = 0; k < num_coords; ++k) {
         float x = coords[2 * k];
         float y = coords[2 * k + 1];
@@ -685,10 +694,10 @@ void bilinear_transpose(float* image, float* g_eff, int rows, int cols, float* c
         float dy = y - y1;
 
         // Accumulate contributions based on weights
-        original_image[y1 * cols + x1] += (1 - (x - x1)) * (1 - (y - y1)) * (1 - dx) * (1 - dy) * g_eff[y1 * cols + x1];
-        original_image[y1 * cols + x2] += (1 - (x - x1)) * (y - y1) * (1 - dx) * dy * g_eff[y1 * cols + x2];
-        original_image[y2 * cols + x1] += (x - x1) * (1 - (y - y1)) * dx * (1 - dy) * g_eff[y2 * cols + x1];
-        original_image[y2 * cols + x2] += (x - x1) * (y - y1) * dx * dy * g_eff[y2 * cols + x2];
+        original_image[y1 * cols + x1] += (1 - dx) * (1 - dy) * image[k] ;
+        original_image[y1 * cols + x2] += (1 - dx) * dy * image[k] ;
+        original_image[y2 * cols + x1] += dx * (1 - dy) * image[k] ;
+        original_image[y2 * cols + x2] += dx * dy * image[k] ;
     }
 }
 
