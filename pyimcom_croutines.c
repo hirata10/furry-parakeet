@@ -631,36 +631,86 @@ static PyObject *pyimcom_gridD5512C(PyObject *self, PyObject *args) {
  * Outputs:
  * > interpolated_image = pointer to output array for interpolated values. I_B interpolated onto I_A grid
  */
+static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
+    int rows, cols, num_coords;
+    PyObject *image, *g_eff, *coords; /*inputs*/
+    PyObject *interpolated_image; /*outputs*/
+    PyArrayObject *image_, *g_eff_, *coords_; /*inputs*/
+    PyArrayObject *interpolated_image_; /*outputs*/
 
-void bilinear_interpolation(float* image, float* g_eff, int rows, int cols, float* coords, int num_coords, float* interpolated_image) {
+      /* read arguments */
+    if (!PyArg_ParseTuple(args, "O!O!iiO!iO!", &PyArray_Type, &image, &PyArray_Type, &g_eff, &rows, &cols,
+    &PyArray_Type, &coords, &num_coords, &PyArray_Type, &interpolated_image)) {
+
+    return(NULL);
+    }
+    /* repackage Python arrays as C objects */
+    image_ = (PyArrayObject*)PyArray_FROM_OTF(image, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    g_eff_ = (PyArrayObject*)PyArray_FROM_OTF(g_eff, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    coords_ = (PyArrayObject*)PyArray_FROM_OTF(coords, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    interpolated_image_ = (PyArrayObject*)PyArray_FROM_OTF(interpolated_image, NPY_DOUBLE, NPY_ARRAY_INOUT_ARRAY2);
+
+    if (rows <= 0 || cols <= 0) {
+        char error_msg[200];
+        snprintf(error_msg, sizeof(error_msg),
+                 "Invalid image dimensions: rows=%d, cols=%d", rows, cols);
+        PyErr_SetString(PyExc_ValueError, error_msg);
+        return;
+    }
+
+    // Get pointers to the data
+    double *image_data = (double*)PyArray_DATA(image_);
+    double *g_eff_data = (double*)PyArray_DATA(g_eff_);
+    double *coords_data = (double*)PyArray_DATA(coords_);
+    double *interp_data = (double*)PyArray_DATA(interpolated_image_);
+
+    double x, y;
+    int x1, y1, x2, y2;
+    double dx, dy;
+
     for (int k = 0; k < num_coords; ++k) { //iterate through coordinate pairs
-        float x = coords[2 * k];
-        float y = coords[2 * k + 1];
+         x = coords_data[2*k];
+         y = coords_data[2*k+1];
 
         // Calculate the indices of the four surrounding pixels
-        int x1 = (int)floor(x);
-        int y1 = (int)floor(y);
-        int x2 = x1 + 1;
-        int y2 = y1 + 1;
+         x1 = (int)floor(x);
+         y1 = (int)floor(y);
+         x2 = x1 + 1;
+         y2 = y1 + 1;
 
         if (x1 < 0 || x2 >= cols || y1 < 0 || y2 >= rows || x1 >= cols || y1 >= rows) {
-             continue; // Skip out-of-bounds; Might want to change this later?
+            continue; // Skip out-of-bounds; Might want to change this later?
         }
 
         // Compute fractional distances from x1 and y1
-        float dx = x - x1;
-        float dy = y - y1;
-
-        // Compute weights
+         dx = x - x1;
+         dy = y - y1;
 
         // Compute contributions; image_A_interp[pixel] = (weight)*(image_B[contributing_pixel])*(g_eff_B[contributing_pixel])
-        interpolated_image[k] =
-            (1 - dx) * (1 - dy) * image[y1 * cols + x1] * g_eff[y1 * cols + x1]
-            + (1 - dx) * dy * image[y2 * cols + x1] * g_eff[y2 * cols + x1]
-            + (1 - dy) * dx * image[y1 * cols + x2] * g_eff[y1 * cols + x2]
-            + dx * dy * image[y2 * cols + x2] * g_eff[y2 * cols + x2];
-    }
-}
+        interp_data[k] =
+            (1. - dx) * (1. - dy) * image_data[y1 * cols + x1] * g_eff_data[y1 * cols + x1]
+            + (1. - dx) * dy * image_data[y2 * cols + x1] * g_eff_data[y2 * cols + x1]
+            + (1. - dy) * dx * image_data[y1 * cols + x2] * g_eff_data[y1 * cols + x2]
+            + dx * dy * image_data[y2 * cols + x2] * g_eff_data[y2 * cols + x2];
+
+
+    }  //end iteration over coordinate pairs
+
+     /* reference count and resolve */
+    Py_DECREF(image_);
+    Py_DECREF(g_eff_);
+    Py_DECREF(coords_);
+    PyArray_ResolveWritebackIfCopy(interpolated_image_);
+    Py_DECREF(interpolated_image_);
+
+    printf("Finished cleanup");
+    Py_INCREF(Py_None);
+
+    return(Py_None);
+
+} /* end static pyobject bilinear interpolation */
+
+
  /*  Transpose interpolation function
  *
  * Inputs:
