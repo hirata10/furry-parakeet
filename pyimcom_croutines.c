@@ -703,7 +703,6 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     PyArray_ResolveWritebackIfCopy(interpolated_image_);
     Py_DECREF(interpolated_image_);
 
-    printf("Finished cleanup");
     Py_INCREF(Py_None);
 
     return(Py_None);
@@ -722,9 +721,79 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
  *
  * Outputs:
  * > original_image = pointer for the output of transpose interpolation (gradient image interpolated onto image "B" grid)
+*/
 
- */
-void bilinear_transpose(float* image, int rows, int cols, float* coords, int num_coords, float* original_image) {
+static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
+    int rows, cols, num_coords;
+    PyObject *image, *coords; /*inputs*/
+    PyObject *original_image; /*outputs*/
+    PyArrayObject *image_, *coords_; /*inputs*/
+    PyArrayObject *original_image_; /*outputs*/
+
+      /* read arguments */
+    if (!PyArg_ParseTuple(args, "O!iiO!iO!", &PyArray_Type, &image, &rows, &cols,
+    &PyArray_Type, &coords, &num_coords, &PyArray_Type, &original_image)) {
+
+    return(NULL);
+    }
+    /* repackage Python arrays as C objects */
+    image_ = (PyArrayObject*)PyArray_FROM_OTF(image, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    coords_ = (PyArrayObject*)PyArray_FROM_OTF(coords, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
+    original_image_ = (PyArrayObject*)PyArray_FROM_OTF(interpolated_image, NPY_DOUBLE, NPY_ARRAY_INOUT_ARRAY2);
+
+    if (rows <= 0 || cols <= 0) {
+        char error_msg[200];
+        snprintf(error_msg, sizeof(error_msg),
+                 "Invalid image dimensions: rows=%d, cols=%d", rows, cols);
+        PyErr_SetString(PyExc_ValueError, error_msg);
+        return;
+    }
+
+    // Get pointers to the data
+    double *image_data = (double*)PyArray_DATA(image_);
+    double *coords_data = (double*)PyArray_DATA(coords_);
+    double *original_data = (double*)PyArray_DATA(interpolated_image_);
+
+    double x, y;
+    int x1, y1, x2, y2;
+    double dx, dy;
+
+    for (int k = 0; k < num_coords; ++k) {
+        x = coords_data[2 * k];
+        y = coords_data[2 * k + 1];
+
+        x1 = (int)floor(x);
+        y1 = (int)floor(y);
+        x2 = x1 + 1;
+        y2 = y1 + 1;
+
+        if (x1 < 0 || x2 >= cols || y1 < 0 || y2 >= rows) {
+            continue; // Skip out-of-bounds
+        }
+
+        // Compute fractional distances from x1 and y1
+        dx = x - x1;
+        dy = y - y1;
+
+        // Accumulate contributions based on weights
+        original_data[y1 * cols + x1] += (1 - dx) * (1 - dy) * image_data[k] ;
+        original_data[y1 * cols + x2] += (1 - dx) * dy * image_data[k] ;
+        original_data[y2 * cols + x1] += dx * (1 - dy) * image_data[k] ;
+        original_data[y2 * cols + x2] += dx * dy * image_data[k] ;
+
+    }
+    /* reference count and resolve */
+    Py_DECREF(image_);
+    Py_DECREF(coords_);
+    PyArray_ResolveWritebackIfCopy(original_image_);
+    Py_DECREF(original_image_);
+
+    printf("Finished cleanup");
+    Py_INCREF(Py_None);
+
+    return(Py_None);
+}
+/* void bilinear_transpose(float* image, int rows, int cols, float* coords, int num_coords, float* original_image) {
 
     for (int k = 0; k < num_coords; ++k) {
         float x = coords[2 * k];
@@ -750,7 +819,7 @@ void bilinear_transpose(float* image, int rows, int cols, float* coords, int num
         original_image[y2 * cols + x2] += dx * dy * image[k] ;
     }
 }
-
+end original transpose interpolation*/
 
 
 /*
