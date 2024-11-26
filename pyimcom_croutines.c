@@ -739,7 +739,7 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
     /* repackage Python arrays as C objects */
     image_ = (PyArrayObject*)PyArray_FROM_OTF(image, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
     coords_ = (PyArrayObject*)PyArray_FROM_OTF(coords, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
-    original_image_ = (PyArrayObject*)PyArray_FROM_OTF(interpolated_image, NPY_DOUBLE, NPY_ARRAY_INOUT_ARRAY2);
+    original_image_ = (PyArrayObject*)PyArray_FROM_OTF(original_image, NPY_DOUBLE, NPY_ARRAY_INOUT_ARRAY2);
 
     if (rows <= 0 || cols <= 0) {
         char error_msg[200];
@@ -752,7 +752,7 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
     // Get pointers to the data
     double *image_data = (double*)PyArray_DATA(image_);
     double *coords_data = (double*)PyArray_DATA(coords_);
-    double *original_data = (double*)PyArray_DATA(interpolated_image_);
+    double *original_data = (double*)PyArray_DATA(original_image_);
 
     double x, y;
     int x1, y1, x2, y2;
@@ -788,7 +788,6 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
     PyArray_ResolveWritebackIfCopy(original_image_);
     Py_DECREF(original_image_);
 
-    printf("Finished cleanup");
     Py_INCREF(Py_None);
 
     return(Py_None);
