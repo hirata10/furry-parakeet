@@ -729,6 +729,7 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
     PyObject *original_image; /*outputs*/
     PyArrayObject *image_, *coords_; /*inputs*/
     PyArrayObject *original_image_; /*outputs*/
+    PyArrayObject *weight_image_;
 
       /* read arguments */
     if (!PyArg_ParseTuple(args, "O!iiO!iO!", &PyArray_Type, &image, &rows, &cols,
@@ -740,6 +741,8 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
     image_ = (PyArrayObject*)PyArray_FROM_OTF(image, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
     coords_ = (PyArrayObject*)PyArray_FROM_OTF(coords, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
     original_image_ = (PyArrayObject*)PyArray_FROM_OTF(original_image, NPY_DOUBLE, NPY_ARRAY_INOUT_ARRAY2);
+    weight_image_ = (PyArrayObject*)PyArray_ZEROS(2, PyArray_DIMS(original_image_), NPY_DOUBLE, 0);
+
 
     if (rows <= 0 || cols <= 0) {
         char error_msg[200];
@@ -753,6 +756,8 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
     double *image_data = (double*)PyArray_DATA(image_);
     double *coords_data = (double*)PyArray_DATA(coords_);
     double *original_data = (double*)PyArray_DATA(original_image_);
+    double *weight_data = (double*)PyArray_DATA(weight_image_);
+
 
     double x, y;
     int x1, y1, x2, y2;
@@ -775,16 +780,35 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
         dx = x - x1;
         dy = y - y1;
 
-        // Accumulate contributions based on weights
-        original_data[y1 * cols + x1] += (1 - dx) * (1 - dy) * image_data[k] ;
-        original_data[y1 * cols + x2] += (1 - dx) * dy * image_data[k] ;
-        original_data[y2 * cols + x1] += dx * (1 - dy) * image_data[k] ;
-        original_data[y2 * cols + x2] += dx * dy * image_data[k] ;
+        // Weights
+        double w11 = (1 - dx) * (1 - dy);
+        double w12 = (1 - dx) * dy;
+        double w21 = dx * (1 - dy);
+        double w22 = dx * dy;
 
+        // Accumulate contributions based on weights
+        original_data[y1 * cols + x1] += w11 * image_data[k];
+        original_data[y1 * cols + x2] += w12 * image_data[k];
+        original_data[y2 * cols + x1] += w21 * image_data[k];
+        original_data[y2 * cols + x2] += w22 * image_data[k];
+
+        // Weight map
+        weight_data[y1 * cols + x1] += w11;
+        weight_data[y1 * cols + x2] += w12;
+        weight_data[y2 * cols + x1] += w21;
+        weight_data[y2 * cols + x2] += w22;
+
+    }
+
+    for (int i = 0; i < rows * cols; ++i) {
+        if (weight_data[i] > 0) {
+            original_data[i] /= weight_data[i];
+        }
     }
     /* reference count and resolve */
     Py_DECREF(image_);
     Py_DECREF(coords_);
+    Py_DECREF(weight_image_);
     PyArray_ResolveWritebackIfCopy(original_image_);
     Py_DECREF(original_image_);
 
