@@ -668,7 +668,7 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     /* make local, flattened versions of arrays*/
     double *image_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
     double *g_eff_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
-    double *coords_data = (double*)malloc((size_t)(cols_rows*sizeof(double)))
+    double *coords_data = (double*)malloc((size_t)(cols*rows*sizeof(double)))
     double *interp_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
     ipos=0;
     for(yip=0;yip<cols;yip++)
