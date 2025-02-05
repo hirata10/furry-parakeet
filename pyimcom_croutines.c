@@ -633,6 +633,7 @@ static PyObject *pyimcom_gridD5512C(PyObject *self, PyObject *args) {
  */
 static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     int rows, cols, num_coords;
+    long yip, xip, ipos;
     PyObject *image, *g_eff, *coords; /*inputs*/
     PyObject *interpolated_image; /*outputs*/
     PyArrayObject *image_, *g_eff_, *coords_; /*inputs*/
@@ -659,10 +660,23 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     }
 
     // Get pointers to the data
-    double *image_data = (double*)PyArray_DATA(image_);
-    double *g_eff_data = (double*)PyArray_DATA(g_eff_);
-    double *coords_data = (double*)PyArray_DATA(coords_);
-    double *interp_data = (double*)PyArray_DATA(interpolated_image_);
+    // double *image_data = *(double*)PyArray_GETPTR2(image_, imy, imx);
+    // double *g_eff_data = *(double*)PyArray_GETPTR2(g_eff_, gy, gx);
+    // double *coords_data = (double*)PyArray_DATA(coords_);
+    //double *interp_data = *(double*)PyArray_GETPTR2(interpolated_image_, inty, intx);
+
+    /* make local, flattened versions of arrays*/
+    double *image_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
+    double *g_eff_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
+    double *coords_data = (double*)malloc((size_t)(cols_rows*sizeof(double)))
+    double *interp_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
+    ipos=0;
+    for(yip=0;yip<cols;yip++)
+        for(xip=0;xip<rows;xip++)
+            image_data[ipos++] = *(double*)PyArray_GETPTR2(image_, yip, xip);
+            g_eff_data[ipos++] = *(double*)PyArray_GETPTR2(g_eff_, yip, xip);
+            coords_data[ipos++] = *(double*)PyArray_GETPTR2(coords_,yip, xip);
+            interp_data[ipos++] = *(double*)PyArray_GETPTR2(interpolated_image_, yip, xip);
 
     double x, y;
     int x1, y1, x2, y2;
