@@ -671,12 +671,15 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     double *coords_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
     double *interp_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
     ipos=0;
-    for(yip=0;yip<cols;yip++)
-        for(xip=0;xip<rows;xip++)
-            image_data[ipos++] = *(double*)PyArray_GETPTR2(image_, yip, xip);
-            g_eff_data[ipos++] = *(double*)PyArray_GETPTR2(g_eff_, yip, xip);
-            coords_data[ipos++] = *(double*)PyArray_GETPTR2(coords_,yip, xip);
-            interp_data[ipos++] = *(double*)PyArray_GETPTR2(interpolated_image_, yip, xip);
+    for(yip=0;yip<cols;yip++) {
+        for(xip=0;xip<rows;xip++) {
+            image_data[ipos] = *(double*)PyArray_GETPTR2(image_, yip, xip);
+            g_eff_data[ipos] = *(double*)PyArray_GETPTR2(g_eff_, yip, xip);
+            coords_data[ipos] = *(double*)PyArray_GETPTR2(coords_,yip, xip);
+            interp_data[ipos] = *(double*)PyArray_GETPTR2(interpolated_image_, yip, xip);
+            ipos++;
+          }
+    }
 
     double x, y;
     int x1, y1, x2, y2;
@@ -709,6 +712,13 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
 
 
     }  //end iteration over coordinate pairs
+
+    // Copy results back to numpy array
+    for (int k = 0; k < num_coords; ++k) { //iterate through coordinate pairs
+         int yk = k / cols;
+         int xk = k % cols;
+        *(double*)PyArray_GETPTR2(interpolated_image_, yk, xk) = interp_data[k];
+    }
 
      /* reference count and resolve */
     Py_DECREF(image_);
