@@ -656,7 +656,7 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
         snprintf(error_msg, sizeof(error_msg),
                  "Invalid image dimensions: rows=%d, cols=%d", rows, cols);
         PyErr_SetString(PyExc_ValueError, error_msg);
-        return;
+        return NULL;
     }
 
     // Get pointers to the data
@@ -768,7 +768,7 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
         snprintf(error_msg, sizeof(error_msg),
                  "Invalid image dimensions: rows=%d, cols=%d", rows, cols);
         PyErr_SetString(PyExc_ValueError, error_msg);
-        return;
+        return NULL;
     }
 
     // Get pointers to the data
