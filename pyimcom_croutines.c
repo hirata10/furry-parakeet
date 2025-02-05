@@ -669,17 +669,22 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     double *image_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
     double *g_eff_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
     double *coords_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
-    double *interp_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
+    double *interp_data = (double*)malloc((size_t)(cols*rows*2*sizeof(double)));
     ipos=0;
     for(yip=0;yip<cols;yip++) {
         for(xip=0;xip<rows;xip++) {
             image_data[ipos] = *(double*)PyArray_GETPTR2(image_, yip, xip);
             g_eff_data[ipos] = *(double*)PyArray_GETPTR2(g_eff_, yip, xip);
-            coords_data[ipos] = *(double*)PyArray_GETPTR2(coords_,yip, xip);
             interp_data[ipos] = *(double*)PyArray_GETPTR2(interpolated_image_, yip, xip);
             ipos++;
           }
     }
+
+    for (int k = 0; k < num_coords; ++k) {
+        coords_data[2*k]   = *(double*)PyArray_GETPTR2(coords_, k, 0); // y
+        coords_data[2*k+1] = *(double*)PyArray_GETPTR2(coords_, k, 1); // x
+    }
+
 
     double x, y;
     int x1, y1, x2, y2;
@@ -728,16 +733,18 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     }
 
      /* reference count and resolve */
+
+    free((char*)image_data);
+    free((char*)g_eff_data);
+    free((char*)coords_data);
+    free((char*)interp_data);
+
     Py_DECREF(image_);
     Py_DECREF(g_eff_);
     Py_DECREF(coords_);
     PyArray_ResolveWritebackIfCopy(interpolated_image_);
     Py_DECREF(interpolated_image_);
 
-    free((char*)image_data);
-    free((char*)g_eff_data);
-    free((char*)coords_data);
-    free((char*)interp_data);
 
     Py_INCREF(Py_None);
 
