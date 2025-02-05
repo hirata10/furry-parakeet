@@ -717,6 +717,11 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     PyArray_ResolveWritebackIfCopy(interpolated_image_);
     Py_DECREF(interpolated_image_);
 
+    free((char*)image_data);
+    free((char*)g_eff_data);
+    free((char*)coords_data);
+    free((char*)interp_data);
+
     Py_INCREF(Py_None);
 
     return(Py_None);
