@@ -704,8 +704,8 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
          dy = y - y1;
          int idx11 = y1 * cols + x1;
 
-         if(k<=5){
-            printf("dimensions: x=%f, y=%f, x1=%d, y1=%d, x2=%d, y2=%d, dx=%f, dy=%f, k=%d, idx11=%d",
+         if(k<=100){
+            printf("\ndimensions: x=%f, y=%f, x1=%d, y1=%d, x2=%d, y2=%d, dx=%f, dy=%f, k=%d, idx11=%d",
                  x, y, x1, y1, x2, y2, dx, dy, k, idx11);
             fflush(stdout);
          }
