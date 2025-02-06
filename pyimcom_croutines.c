@@ -789,18 +789,32 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
         return NULL;
     }
 
-    // Get pointers to the data
-    double *image_data = (double*)PyArray_DATA(image_);
-    double *coords_data = (double*)PyArray_DATA(coords_);
-    double *original_data = (double*)PyArray_DATA(original_image_);
-    double *weight_data = (double*)PyArray_DATA(weight_image_);
+    /* Allocate memory for local arrays */
+    double *image_data = (double*)malloc((size_t)(rows * cols * sizeof(double)));
+    double *coords_data = (double*)malloc((size_t)(2 * num_coords * sizeof(double)));
+    double *original_data = (double*)malloc((size_t)(rows * cols * sizeof(double)));
+    double *weight_data = (double*)malloc((size_t)(rows * cols * sizeof(double)));
 
+    /* Copy input data to local arrays */
+    long ipos=0;
+    for(long yip=0;yip<rows;yip++) {
+        for(long xip=0;xip<cols;xip++) {
+            ipos = yip * cols + xip;
+            image_data[ipos] = *(double*)PyArray_GETPTR2(image_, yip, xip);
+            weight_data[ipos] = *(double*)PyArray_GETPTR2(weight_image_, yip, xip);
+
+          }
+    }
+    for (int k = 0; k < num_coords; k++) {
+        coords_data[2*k] = *(double*)PyArray_GETPTR2(coords_, k, 0);     // x coordinate
+        coords_data[2*k+1] = *(double*)PyArray_GETPTR2(coords_, k, 1);   // y coordinate
+    }
 
     double x, y;
     int x1, y1, x2, y2;
     double dx, dy;
 
-    for (int k = 0; k < num_coords; ++k) {
+    for (int k = 0; k < num_coords; k++) {
         x = coords_data[2 * k];
         y = coords_data[2 * k + 1];
 
@@ -837,11 +851,23 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
 
     }
 
-    for (int i = 0; i < rows * cols; ++i) {
-        if (weight_data[i] > 0) {
-            original_data[i] /= weight_data[i];
+    /* Normalize by weights and copy back to numpy arrays */
+    for (int ipy = 0; ipy < rows; ipy++) {
+        for (int ipx = 0; ipx < cols; ipx++) {
+            int ipos = ipy * cols + ipx;
+            if (weight_data[ipos] > 0) {
+                original_data[ipos] /= weight_data[ipos];
+            }
+            *(double*)PyArray_GETPTR2(original_image_, ipy, ipx) = original_data[ipos];
         }
     }
+
+    /* Clean up */
+    free(image_data);
+    free(coords_data);
+    free(original_data);
+    free(weight_data);
+
     /* reference count and resolve */
     Py_DECREF(image_);
     Py_DECREF(coords_);
