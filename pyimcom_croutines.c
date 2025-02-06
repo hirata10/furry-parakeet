@@ -806,8 +806,8 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
           }
     }
     for (int k = 0; k < num_coords; k++) {
-        coords_data[2*k] = *(double*)PyArray_GETPTR2(coords_, k, 0);     // x coordinate
-        coords_data[2*k+1] = *(double*)PyArray_GETPTR2(coords_, k, 1);   // y coordinate
+        coords_data[2*k] = *(double*)PyArray_GETPTR2(coords_, k, 0);     // y coordinate
+        coords_data[2*k+1] = *(double*)PyArray_GETPTR2(coords_, k, 1);   // x coordinate
     }
 
     double x, y;
@@ -815,8 +815,8 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
     double dx, dy;
 
     for (int k = 0; k < num_coords; k++) {
-        x = coords_data[2 * k];
-        y = coords_data[2 * k + 1];
+        y = coords_data[2 * k];
+        x = coords_data[2 * k + 1];
 
         x1 = (int)floor(x);
         y1 = (int)floor(y);
