@@ -633,7 +633,7 @@ static PyObject *pyimcom_gridD5512C(PyObject *self, PyObject *args) {
  */
 static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     int rows, cols, num_coords;
-    long yip, xip, ipos;
+    int yip, xip, ipos;
     PyObject *image, *g_eff, *coords; /*inputs*/
     PyObject *interpolated_image; /*outputs*/
     PyArrayObject *image_, *g_eff_, *coords_; /*inputs*/
@@ -668,19 +668,20 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     /* make local, flattened versions of arrays*/
     double *image_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
     double *g_eff_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
-    double *coords_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
-    double *interp_data = (double*)malloc((size_t)(cols*rows*2*sizeof(double)));
+    double *coords_data = (double*)malloc((size_t)(cols*rows*2*sizeof(double)));
+    double *interp_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
+
     ipos=0;
-    for(yip=0;yip<cols;yip++) {
-        for(xip=0;xip<rows;xip++) {
+    for(yip=0;yip<rows;yip++) {
+        for(xip=0;xip<cols;xip++) {
+            ipos = ip *cols + xip
             image_data[ipos] = *(double*)PyArray_GETPTR2(image_, yip, xip);
             g_eff_data[ipos] = *(double*)PyArray_GETPTR2(g_eff_, yip, xip);
-            interp_data[ipos] = *(double*)PyArray_GETPTR2(interpolated_image_, yip, xip);
-            ipos++;
+
           }
     }
 
-    for (int k = 0; k < num_coords; ++k) {
+    for (int k = 0; k < num_coords; k++) {
         coords_data[2*k]   = *(double*)PyArray_GETPTR2(coords_, k, 0); // y
         coords_data[2*k+1] = *(double*)PyArray_GETPTR2(coords_, k, 1); // x
     }
@@ -707,13 +708,6 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
         // Compute fractional distances from x1 and y1
          dx = x - x1;
          dy = y - y1;
-         int idx11 = y1 * cols + x1;
-
-         if(k<=100){
-            printf("\ndimensions: x=%f, y=%f, x1=%d, y1=%d, x2=%d, y2=%d, dx=%f, dy=%f, k=%d, idx11=%d",
-                 x, y, x1, y1, x2, y2, dx, dy, k, idx11);
-            fflush(stdout);
-         }
 
         // Compute contributions; image_A_interp[pixel] = (weight)*(image_B[contributing_pixel])*(g_eff_B[contributing_pixel])
         interp_data[k] =
@@ -734,10 +728,10 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
 
      /* reference count and resolve */
 
-    free((char*)image_data);
-    free((char*)g_eff_data);
-    free((char*)coords_data);
-    free((char*)interp_data);
+    free(image_data);
+    free(g_eff_data);
+    free(coords_data);
+    free(interp_data);
 
     Py_DECREF(image_);
     Py_DECREF(g_eff_);
