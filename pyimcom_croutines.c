@@ -674,7 +674,7 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     ipos=0;
     for(yip=0;yip<rows;yip++) {
         for(xip=0;xip<cols;xip++) {
-            ipos = ip *cols + xip
+            ipos = yip * cols + xip
             image_data[ipos] = *(double*)PyArray_GETPTR2(image_, yip, xip);
             g_eff_data[ipos] = *(double*)PyArray_GETPTR2(g_eff_, yip, xip);
 
