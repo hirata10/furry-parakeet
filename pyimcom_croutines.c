@@ -833,8 +833,8 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
 
         // Weights
         double w11 = (1 - dx) * (1 - dy);
-        double w12 = (1 - dx) * dy;
-        double w21 = dx * (1 - dy);
+        double w21 = (1 - dx) * dy;
+        double w12 = dx * (1 - dy);
         double w22 = dx * dy;
 
         // Accumulate contributions based on weights
@@ -855,9 +855,9 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
     for (int ipy = 0; ipy < rows; ipy++) {
         for (int ipx = 0; ipx < cols; ipx++) {
             int ipos = ipy * cols + ipx;
-            if (weight_data[ipos] > 0) {
-                original_data[ipos] /= weight_data[ipos];
-            }
+//            if (weight_data[ipos] > 0) {
+//                original_data[ipos] /= weight_data[ipos];
+//            }
             *(double*)PyArray_GETPTR2(original_image_, ipy, ipx) = original_data[ipos];
         }
     }
