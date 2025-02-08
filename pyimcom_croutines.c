@@ -633,6 +633,7 @@ static PyObject *pyimcom_gridD5512C(PyObject *self, PyObject *args) {
  */
 static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     int rows, cols, num_coords;
+    int yip, xip, ipos;
     PyObject *image, *g_eff, *coords; /*inputs*/
     PyObject *interpolated_image; /*outputs*/
     PyArrayObject *image_, *g_eff_, *coords_; /*inputs*/
@@ -655,22 +656,44 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
         snprintf(error_msg, sizeof(error_msg),
                  "Invalid image dimensions: rows=%d, cols=%d", rows, cols);
         PyErr_SetString(PyExc_ValueError, error_msg);
-        return;
+        return NULL;
     }
 
     // Get pointers to the data
-    double *image_data = (double*)PyArray_DATA(image_);
-    double *g_eff_data = (double*)PyArray_DATA(g_eff_);
-    double *coords_data = (double*)PyArray_DATA(coords_);
-    double *interp_data = (double*)PyArray_DATA(interpolated_image_);
+    // double *image_data = *(double*)PyArray_GETPTR2(image_, imy, imx);
+    // double *g_eff_data = *(double*)PyArray_GETPTR2(g_eff_, gy, gx);
+    // double *coords_data = (double*)PyArray_DATA(coords_);
+    //double *interp_data = *(double*)PyArray_GETPTR2(interpolated_image_, inty, intx);
+
+    /* make local, flattened versions of arrays*/
+    double *image_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
+    double *g_eff_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
+    double *coords_data = (double*)malloc((size_t)(cols*rows*2*sizeof(double)));
+    double *interp_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
+
+    ipos=0;
+    for(yip=0;yip<rows;yip++) {
+        for(xip=0;xip<cols;xip++) {
+            ipos = yip * cols + xip;
+            image_data[ipos] = *(double*)PyArray_GETPTR2(image_, yip, xip);
+            g_eff_data[ipos] = *(double*)PyArray_GETPTR2(g_eff_, yip, xip);
+
+          }
+    }
+
+    for (int k = 0; k < num_coords; k++) {
+        coords_data[2*k]   = *(double*)PyArray_GETPTR2(coords_, k, 0); // y
+        coords_data[2*k+1] = *(double*)PyArray_GETPTR2(coords_, k, 1); // x
+    }
+
 
     double x, y;
     int x1, y1, x2, y2;
     double dx, dy;
 
     for (int k = 0; k < num_coords; ++k) { //iterate through coordinate pairs
-         x = coords_data[2*k];
-         y = coords_data[2*k+1];
+         y = coords_data[2*k];
+         x = coords_data[2*k+1];
 
         // Calculate the indices of the four surrounding pixels
          x1 = (int)floor(x);
@@ -696,12 +719,26 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
 
     }  //end iteration over coordinate pairs
 
+    // Copy results back to numpy array
+    for (int k = 0; k < num_coords; ++k) { //iterate through coordinate pairs
+         int yk = k / cols;
+         int xk = k % cols;
+        *(double*)PyArray_GETPTR2(interpolated_image_, yk, xk) = interp_data[k];
+    }
+
      /* reference count and resolve */
+
+    free(image_data);
+    free(g_eff_data);
+    free(coords_data);
+    free(interp_data);
+
     Py_DECREF(image_);
     Py_DECREF(g_eff_);
     Py_DECREF(coords_);
     PyArray_ResolveWritebackIfCopy(interpolated_image_);
     Py_DECREF(interpolated_image_);
+
 
     Py_INCREF(Py_None);
 
@@ -749,23 +786,37 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
         snprintf(error_msg, sizeof(error_msg),
                  "Invalid image dimensions: rows=%d, cols=%d", rows, cols);
         PyErr_SetString(PyExc_ValueError, error_msg);
-        return;
+        return NULL;
     }
 
-    // Get pointers to the data
-    double *image_data = (double*)PyArray_DATA(image_);
-    double *coords_data = (double*)PyArray_DATA(coords_);
-    double *original_data = (double*)PyArray_DATA(original_image_);
-    double *weight_data = (double*)PyArray_DATA(weight_image_);
+    /* Allocate memory for local arrays */
+    double *image_data = (double*)malloc((size_t)(rows * cols * sizeof(double)));
+    double *coords_data = (double*)malloc((size_t)(2 * num_coords * sizeof(double)));
+    double *original_data = (double*)malloc((size_t)(rows * cols * sizeof(double)));
+    double *weight_data = (double*)malloc((size_t)(rows * cols * sizeof(double)));
 
+    /* Copy input data to local arrays */
+    long ipos=0;
+    for(long yip=0;yip<rows;yip++) {
+        for(long xip=0;xip<cols;xip++) {
+            ipos = yip * cols + xip;
+            image_data[ipos] = *(double*)PyArray_GETPTR2(image_, yip, xip);
+            weight_data[ipos] = *(double*)PyArray_GETPTR2(weight_image_, yip, xip);
+
+          }
+    }
+    for (int k = 0; k < num_coords; k++) {
+        coords_data[2*k] = *(double*)PyArray_GETPTR2(coords_, k, 0);     // y coordinate
+        coords_data[2*k+1] = *(double*)PyArray_GETPTR2(coords_, k, 1);   // x coordinate
+    }
 
     double x, y;
     int x1, y1, x2, y2;
     double dx, dy;
 
-    for (int k = 0; k < num_coords; ++k) {
-        x = coords_data[2 * k];
-        y = coords_data[2 * k + 1];
+    for (int k = 0; k < num_coords; k++) {
+        y = coords_data[2 * k];
+        x = coords_data[2 * k + 1];
 
         x1 = (int)floor(x);
         y1 = (int)floor(y);
@@ -782,8 +833,8 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
 
         // Weights
         double w11 = (1 - dx) * (1 - dy);
-        double w12 = (1 - dx) * dy;
-        double w21 = dx * (1 - dy);
+        double w21 = (1 - dx) * dy;
+        double w12 = dx * (1 - dy);
         double w22 = dx * dy;
 
         // Accumulate contributions based on weights
@@ -800,11 +851,23 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
 
     }
 
-    for (int i = 0; i < rows * cols; ++i) {
-        if (weight_data[i] > 0) {
-            original_data[i] /= weight_data[i];
+    /* Normalize by weights and copy back to numpy arrays */
+    for (int ipy = 0; ipy < rows; ipy++) {
+        for (int ipx = 0; ipx < cols; ipx++) {
+            int ipos = ipy * cols + ipx;
+//            if (weight_data[ipos] > 0) {
+//                original_data[ipos] /= weight_data[ipos];
+//            }
+            *(double*)PyArray_GETPTR2(original_image_, ipy, ipx) = original_data[ipos];
         }
     }
+
+    /* Clean up */
+    free(image_data);
+    free(coords_data);
+    free(original_data);
+    free(weight_data);
+
     /* reference count and resolve */
     Py_DECREF(image_);
     Py_DECREF(coords_);
