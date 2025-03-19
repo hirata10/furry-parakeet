@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <omp.h>
 #endif
 
 /* PyIMCOM linear algebra kernel -- all the steps with the for loops
@@ -661,11 +662,11 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
 
     /* make local, flattened versions of arrays*/
     double *image_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
-    double *g_eff_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
     double *coords_data = (double*)malloc((size_t)(cols*rows*2*sizeof(double)));
     double *interp_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
 
     ipos=0;
+    #pragma omp parallel for
     for(yip=0;yip<rows;yip++) {
         for(xip=0;xip<cols;xip++) {
             ipos = yip * cols + xip;
@@ -674,6 +675,7 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
           }
     }
 
+    #pragma omp parallel for
     for (int k = 0; k < num_coords; k++) {
         coords_data[2*k]   = *(double*)PyArray_GETPTR2(coords_, k, 0); // y
         coords_data[2*k+1] = *(double*)PyArray_GETPTR2(coords_, k, 1); // x
@@ -684,6 +686,7 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     int x1, y1, x2, y2;
     double dx, dy;
 
+    #pragma omp parallel for private(x, y, x1, y1, x2, y2, dx, dy)
     for (int k = 0; k < num_coords; ++k) { //iterate through coordinate pairs
          y = coords_data[2*k];
          x = coords_data[2*k+1];
@@ -713,6 +716,7 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     }  //end iteration over coordinate pairs
 
     // Copy results back to numpy array
+    #pragma omp parallel for
     for (int k = 0; k < num_coords; ++k) { //iterate through coordinate pairs
          int yk = k / cols;
          int xk = k % cols;
