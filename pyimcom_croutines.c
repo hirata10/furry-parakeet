@@ -659,12 +659,6 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
         return NULL;
     }
 
-    // Get pointers to the data
-    // double *image_data = *(double*)PyArray_GETPTR2(image_, imy, imx);
-    // double *g_eff_data = *(double*)PyArray_GETPTR2(g_eff_, gy, gx);
-    // double *coords_data = (double*)PyArray_DATA(coords_);
-    //double *interp_data = *(double*)PyArray_GETPTR2(interpolated_image_, inty, intx);
-
     /* make local, flattened versions of arrays*/
     double *image_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
     double *g_eff_data = (double*)malloc((size_t)(cols*rows*sizeof(double)));
@@ -675,9 +669,8 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
     for(yip=0;yip<rows;yip++) {
         for(xip=0;xip<cols;xip++) {
             ipos = yip * cols + xip;
-            image_data[ipos] = *(double*)PyArray_GETPTR2(image_, yip, xip);
-            g_eff_data[ipos] = *(double*)PyArray_GETPTR2(g_eff_, yip, xip);
-
+            image_data[ipos] = *(double*)PyArray_GETPTR2(image_, yip, xip)
+            * *(double*)PyArray_GETPTR2(g_eff_, yip, xip);
           }
     }
 
@@ -711,10 +704,10 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
 
         // Compute contributions; image_A_interp[pixel] = (weight)*(image_B[contributing_pixel])*(g_eff_B[contributing_pixel])
         interp_data[k] =
-            (1. - dx) * (1. - dy) * image_data[y1 * cols + x1] * g_eff_data[y1 * cols + x1]
-            + (1. - dx) * dy * image_data[y2 * cols + x1] * g_eff_data[y2 * cols + x1]
-            + (1. - dy) * dx * image_data[y1 * cols + x2] * g_eff_data[y1 * cols + x2]
-            + dx * dy * image_data[y2 * cols + x2] * g_eff_data[y2 * cols + x2];
+            (1. - dx) * (1. - dy) * image_data[y1 * cols + x1]
+            + (1. - dx) * dy * image_data[y2 * cols + x1]
+            + (1. - dy) * dx * image_data[y1 * cols + x2]
+            + dx * dy * image_data[y2 * cols + x2] ;
 
 
     }  //end iteration over coordinate pairs
@@ -831,33 +824,17 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
         dx = x - x1;
         dy = y - y1;
 
-        // Weights
-        double w11 = (1 - dx) * (1 - dy);
-        double w21 = (1 - dx) * dy;
-        double w12 = dx * (1 - dy);
-        double w22 = dx * dy;
-
         // Accumulate contributions based on weights
         original_data[y1 * cols + x1] += w11 * image_data[k];
         original_data[y1 * cols + x2] += w12 * image_data[k];
         original_data[y2 * cols + x1] += w21 * image_data[k];
         original_data[y2 * cols + x2] += w22 * image_data[k];
-
-        // Weight map
-        weight_data[y1 * cols + x1] += w11;
-        weight_data[y1 * cols + x2] += w12;
-        weight_data[y2 * cols + x1] += w21;
-        weight_data[y2 * cols + x2] += w22;
-
     }
 
     /* Normalize by weights and copy back to numpy arrays */
     for (int ipy = 0; ipy < rows; ipy++) {
         for (int ipx = 0; ipx < cols; ipx++) {
             int ipos = ipy * cols + ipx;
-//            if (weight_data[ipos] > 0) {
-//                original_data[ipos] /= weight_data[ipos];
-//            }
             *(double*)PyArray_GETPTR2(original_image_, ipy, ipx) = original_data[ipos];
         }
     }
