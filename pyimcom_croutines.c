@@ -726,7 +726,6 @@ static PyObject *bilinear_interpolation(PyObject *self, PyObject *args) {
      /* reference count and resolve */
 
     free(image_data);
-    free(g_eff_data);
     free(coords_data);
     free(interp_data);
 
@@ -775,8 +774,6 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
     image_ = (PyArrayObject*)PyArray_FROM_OTF(image, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
     coords_ = (PyArrayObject*)PyArray_FROM_OTF(coords, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY);
     original_image_ = (PyArrayObject*)PyArray_FROM_OTF(original_image, NPY_DOUBLE, NPY_ARRAY_INOUT_ARRAY2);
-    weight_image_ = (PyArrayObject*)PyArray_ZEROS(2, PyArray_DIMS(original_image_), NPY_DOUBLE, 0);
-
 
     if (rows <= 0 || cols <= 0) {
         char error_msg[200];
@@ -790,7 +787,6 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
     double *image_data = (double*)malloc((size_t)(rows * cols * sizeof(double)));
     double *coords_data = (double*)malloc((size_t)(2 * num_coords * sizeof(double)));
     double *original_data = (double*)malloc((size_t)(rows * cols * sizeof(double)));
-    double *weight_data = (double*)malloc((size_t)(rows * cols * sizeof(double)));
 
     /* Copy input data to local arrays */
     long ipos=0;
@@ -830,6 +826,12 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
         dx = x - x1;
         dy = y - y1;
 
+        // Weights
+        double w11 = (1 - dx) * (1 - dy);
+        double w21 = (1 - dx) * dy;
+        double w12 = dx * (1 - dy);
+        double w22 = dx * dy;
+
         // Accumulate contributions based on weights
         original_data[y1 * cols + x1] += w11 * image_data[k];
         original_data[y1 * cols + x2] += w12 * image_data[k];
@@ -850,12 +852,10 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
     free(image_data);
     free(coords_data);
     free(original_data);
-    free(weight_data);
 
     /* reference count and resolve */
     Py_DECREF(image_);
     Py_DECREF(coords_);
-    Py_DECREF(weight_image_);
     PyArray_ResolveWritebackIfCopy(original_image_);
     Py_DECREF(original_image_);
 
@@ -863,33 +863,6 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
 
     return(Py_None);
 }
-/* void bilinear_transpose(float* image, int rows, int cols, float* coords, int num_coords, float* original_image) {
-
-    for (int k = 0; k < num_coords; ++k) {
-        float x = coords[2 * k];
-        float y = coords[2 * k + 1];
-
-        int x1 = (int)floor(x);
-        int y1 = (int)floor(y);
-        int x2 = x1 + 1;
-        int y2 = y1 + 1;
-
-        if (x1 < 0 || x2 >= cols || y1 < 0 || y2 >= rows) {
-            continue; // Skip out-of-bounds
-        }
-
-        // Compute fractional distances from x1 and y1
-        float dx = x - x1;
-        float dy = y - y1;
-
-        // Accumulate contributions based on weights
-        original_image[y1 * cols + x1] += (1 - dx) * (1 - dy) * image[k] ;
-        original_image[y1 * cols + x2] += (1 - dx) * dy * image[k] ;
-        original_image[y2 * cols + x1] += dx * (1 - dy) * image[k] ;
-        original_image[y2 * cols + x2] += dx * dy * image[k] ;
-    }
-}
-end original transpose interpolation*/
 
 
 /*
