@@ -794,14 +794,15 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
 
     /* Copy input data to local arrays */
     long ipos=0;
+    #pragma omp parallel for
     for(long yip=0;yip<rows;yip++) {
         for(long xip=0;xip<cols;xip++) {
             ipos = yip * cols + xip;
             image_data[ipos] = *(double*)PyArray_GETPTR2(image_, yip, xip);
-            weight_data[ipos] = *(double*)PyArray_GETPTR2(weight_image_, yip, xip);
-
           }
     }
+
+    #pragma omp parallel for
     for (int k = 0; k < num_coords; k++) {
         coords_data[2*k] = *(double*)PyArray_GETPTR2(coords_, k, 0);     // y coordinate
         coords_data[2*k+1] = *(double*)PyArray_GETPTR2(coords_, k, 1);   // x coordinate
@@ -811,6 +812,7 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
     int x1, y1, x2, y2;
     double dx, dy;
 
+    #pragma omp parallel for private(x, y, x1, y1, x2, y2, dx, dy)
     for (int k = 0; k < num_coords; k++) {
         y = coords_data[2 * k];
         x = coords_data[2 * k + 1];
@@ -835,7 +837,8 @@ static PyObject *bilinear_transpose (PyObject *self, PyObject *args){
         original_data[y2 * cols + x2] += w22 * image_data[k];
     }
 
-    /* Normalize by weights and copy back to numpy arrays */
+    /* Copy back to numpy arrays */
+    #pragma omp parallel for
     for (int ipy = 0; ipy < rows; ipy++) {
         for (int ipx = 0; ipx < cols; ipx++) {
             int ipos = ipy * cols + ipx;
