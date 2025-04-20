@@ -12,7 +12,7 @@ if exists('IncludePaths.txt'):
     for line in lines:
       dirs += [line.strip()]
 # C routines
-ec = ['-fopenmp']
+ec = ['-fopenmp', '-O2']
 el = ['-fopenmp']
 
 setup(name='furryparakeet',

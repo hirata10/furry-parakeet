@@ -2,12 +2,11 @@
 #include <Python.h>
 #include "ndarrayobject.h"
 
-#ifdef IS_TIMING
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <time.h>
 #include <omp.h>
-#endif
 
 /* PyIMCOM linear algebra kernel -- all the steps with the for loops
  * (i.e., except the matrix diagonalization)
@@ -75,7 +74,10 @@ static PyObject *pyimcom_lakernel1(PyObject *self, PyObject *args) {
 
   /* package inputs into flat C arrays to minimize pointer arithmetic in inner for loops */
   mPhalf = (double*)malloc((size_t)((m*n+n*n+n)*sizeof(double)));
-  if (mPhalf==NULL) return(NULL);
+  if (mPhalf==NULL) {
+    PyErr_SetString(PyExc_TypeError, "Memory allocation failed in pyimcom_lakernel1");
+    return((PyObject*)NULL);
+  }
   for(a=0;a<m;a++) for(j=0;j<n;j++) mPhalf[a*n+j] = *(double*)PyArray_GETPTR2(mPhalfPy_,a,j);
   /* .. and this one is Q^T */
   QT_C = mPhalf + m*n;
@@ -197,12 +199,7 @@ static PyObject *pyimcom_iD5512C(PyObject *self, PyObject *args) {
   nout = xpos_->dimensions[0];
 
   /* get local data */
-  locdata = (double*)malloc((size_t)(nlayer*ngy*ngx*sizeof(double)));
-  ipos = 0;
-  for(ilayer=0;ilayer<nlayer;ilayer++)
-    for(yi=0;yi<ngy;yi++)
-      for(xi=0;xi<ngx;xi++)
-        locdata[ipos++] = *(double*)PyArray_GETPTR3(infunc_,ilayer,yi,xi);
+  locdata = (double*)PyArray_DATA(infunc_);
 
   /* loop over points to interpolate */
   for(ipos=0;ipos<nout;ipos++) {
@@ -279,8 +276,6 @@ static PyObject *pyimcom_iD5512C(PyObject *self, PyObject *args) {
   PyArray_ResolveWritebackIfCopy(fhatout_);
   Py_DECREF(fhatout_);
 
-  free((char*)locdata);
-
   Py_INCREF(Py_None);
   return(Py_None);
   /* -- this is the end of the function if it executed normally -- */
@@ -335,12 +330,7 @@ static PyObject *pyimcom_iD5512C_sym(PyObject *self, PyObject *args) {
   sqnout = (long)floor(sqrt(nout+1));
 
   /* get local data */
-  locdata = (double*)malloc((size_t)(nlayer*ngy*ngx*sizeof(double)));
-  ipos = 0;
-  for(ilayer=0;ilayer<nlayer;ilayer++)
-    for(yi=0;yi<ngy;yi++)
-      for(xi=0;xi<ngx;xi++)
-        locdata[ipos++] = *(double*)PyArray_GETPTR3(infunc_,ilayer,yi,xi);
+  locdata = (double*)PyArray_DATA(infunc_);
 
   /* loop over points to interpolate, but in this function only the upper half triangle */
   for(ipos1=0;ipos1<sqnout;ipos1++) for(ipos2=ipos1;ipos2<sqnout;ipos2++) {
@@ -426,8 +416,6 @@ static PyObject *pyimcom_iD5512C_sym(PyObject *self, PyObject *args) {
   PyArray_ResolveWritebackIfCopy(fhatout_);
   Py_DECREF(fhatout_);
 
-  free((char*)locdata);
-
   Py_INCREF(Py_None);
   return(Py_None);
   /* -- this is the end of the function if it executed normally -- */
@@ -487,19 +475,27 @@ static PyObject *pyimcom_gridD5512C(PyObject *self, PyObject *args) {
   nyo = ypos_->dimensions[1];
 
   /* get local data */
-  locdata = (double*)malloc((size_t)(ngy*ngx*sizeof(double)));
-  ipos = 0;
-  for(yip=0;yip<ngy;yip++)
-    for(xip=0;xip<ngx;xip++)
-      locdata[ipos++] = *(double*)PyArray_GETPTR2(infunc_,yip,xip);
+  locdata = (double*)PyArray_DATA(infunc_);
 
   /* allocate arrays */
-  wx_ar = (double**)malloc((size_t)(nxo*sizeof(double*)));
-  for(ix=0;ix<nxo;ix++) wx_ar[ix] = (double*)malloc((size_t)(10*sizeof(double)));
-  wy_ar = (double**)malloc((size_t)(nyo*sizeof(double*)));
-  for(iy=0;iy<nyo;iy++) wy_ar[iy] = (double*)malloc((size_t)(10*sizeof(double)));
+  wx_ar = (double**)malloc((size_t)(nxo*sizeof(double*) + 10*nxo*sizeof(double)));
+  if (wx_ar==NULL) {
+    PyErr_SetString(PyExc_TypeError, "Memory allocation failed in pyimcom_lakernel1");
+    return((PyObject*)NULL);
+  }
+  for(ix=0;ix<nxo;ix++) wx_ar[ix] = (double*)(wx_ar+nxo) + 10*ix;
+  wy_ar = (double**)malloc((size_t)(nyo*sizeof(double*) + 10*nyo*sizeof(double)));
+  if (wy_ar==NULL) {
+    PyErr_SetString(PyExc_TypeError, "Memory allocation failed in pyimcom_lakernel1");
+    return((PyObject*)NULL);
+  }
+  for(iy=0;iy<nyo;iy++) wy_ar[iy] = (double*)(wy_ar+nyo) + 10*iy;
   xi = (long*)malloc((size_t)(nxo*sizeof(long)));
   yi = (long*)malloc((size_t)(nyo*sizeof(long)));
+  if (xi==NULL || yi==NULL) {
+    PyErr_SetString(PyExc_TypeError, "Memory allocation failed in pyimcom_lakernel1");
+    return((PyObject*)NULL);
+  }
 
   /* loop over points to interpolate */
   for(i_in=0;i_in<npi;i_in++) {
@@ -595,9 +591,7 @@ static PyObject *pyimcom_gridD5512C(PyObject *self, PyObject *args) {
   } /* end i_in loop */
 
   /* deallocate arrays */
-  for(ix=0;ix<nxo;ix++) free((char*)wx_ar[ix]);
   free((char*)wx_ar);
-  for(iy=0;iy<nyo;iy++) free((char*)wy_ar[iy]);
   free((char*)wy_ar);
   free((char*)xi);
   free((char*)yi);
@@ -607,8 +601,6 @@ static PyObject *pyimcom_gridD5512C(PyObject *self, PyObject *args) {
   Py_DECREF(ypos_);
   PyArray_ResolveWritebackIfCopy(fhatout_);
   Py_DECREF(fhatout_);
-
-  free((char*)locdata);
 
   Py_INCREF(Py_None);
   return(Py_None);

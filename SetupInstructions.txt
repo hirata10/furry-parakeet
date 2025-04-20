@@ -61,3 +61,5 @@ python testdither.py sample_config.txt
 If you want to remove these routines, you can use:
 
 pip uninstall furryparakeet
+
+Comment: you can use CC=gcc to force the system to use a particular compiler. The "best" choice probably depends on your system.
