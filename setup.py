@@ -12,15 +12,16 @@ if exists('IncludePaths.txt'):
     for line in lines:
       dirs += [line.strip()]
 # C routines
-ec = []
-
+ec = ['-fopenmp']
+el = ['-fopenmp']
 
 setup(name='furryparakeet',
   version='2',
   ext_modules=[Extension('pyimcom_croutines',
     sources = ['pyimcom_croutines.c'],
     include_dirs=dirs,
-    extra_compile_args=ec
+    extra_compile_args=ec,
+    extra_link_args=el
   )],
   py_modules=['pyimcom_croutines', 'pyimcom_lakernel', 'pyimcom_interface']
 )
